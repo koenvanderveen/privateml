@@ -99,7 +99,7 @@ class Softmax(Layer):
     
     def forward(self, x):
         likelihoods = x.exp()
-        probs = likelihoods.div(likelihoods.sum(axis=1))
+        probs = likelihoods.div(likelihoods.sum(axis=1, keepdims=True))
         self.cache = probs
         return probs
     
@@ -118,18 +118,118 @@ class Dropout(Layer):
 
 
 class Flatten(Layer):
-    # TODO
-    pass
+    def __init__(self):
+        self.shape = None
+        
+    def initialize(self):
+        pass
+    
+    def forward(self, x):
+        self.shape = x.shape
+        y = x.reshape([x.shape[0], -1])
+        return y
+    
+    def backward(self, d_y, learning_rate):
+        return d_y.reshape(self.shape)
+                   
 
 
-class AveragePooling2D(Layer):
-    # TODO
-    pass
+class Conv2D():
+        
+    def __init__(self, fshape, strides=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)):
+        """ 2 Dimensional convolutional layer
+            fshape: tuple of rank 4
+            strides: int with stride size
+            filter init: lambda function with shape parameter
+            Example: Conv2D((4, 4, 1, 20), strides=2, filter_init=lambda shp: np.random.normal(scale=0.01, size=shp))       
+        """
+        self.fshape = fshape
+        self.strides = strides
+        self.filter_init = filter_init
+        self.cache = None
+        self.initializer = None
+        
+    def initialize(self):
+        self.filters = self.filter_init(self.fshape)
 
+    def forward(self, x):
+        # TODO: padding 
+        s = (x.shape[1] - self.fshape[0]) // self.strides + 1
+        self.initializer = type(x)
+        fmap = self.initializer(np.zeros((x.shape[0], s, s, self.fshape[-1])))
+        for j in range(s):
+            for i in range(s):
+                fmap[:, j, i, :] = (x[:, j * self.strides:j * self.strides + self.fshape[0], i * self.strides:i * self.strides + self.fshape[1], :, np.newaxis] * self.filters).sum(axis=(1, 2, 3))
+        self.cache = x
+        return fmap
+    
+    def backward(self, d_y, learning_rate):
+        x = self.cache
+        # compute gradients for internal parameters and update
+        d_weights = self.get_grad(x, d_y)
+        self.filters = (d_weights * learning_rate).neg() + self.filters
+        # compute and return external gradient
+        d_x = self.backwarded_error(d_y)
+        return d_x
+    
+    def backwarded_error(self, layer_err):
+        bfmap_shape = (layer_err.shape[1] - 1) * self.strides + self.fshape[0]
+        backwarded_fmap = self.initializer(np.zeros((layer_err.shape[0], bfmap_shape, bfmap_shape, self.fshape[-2])))
+        s = (backwarded_fmap.shape[1] - self.fshape[0]) // self.strides + 1
+        for j in range(s):
+            for i in range(s):
+                backwarded_fmap[:, j * self.strides:j  * self.strides + self.fshape[0], i * self.strides:i * self.strides + self.fshape[1]] += (self.filters[np.newaxis, ...] * layer_err[:, j:j+1, i:i+1, np.newaxis, :]).sum(axis=4)
+        return backwarded_fmap
 
-class Convolution2D(Layer):
-    # TODO
-    pass
+    def get_grad(self, x, layer_err):
+        total_layer_err = layer_err.sum(axis=(0, 1, 2))
+        filters_err = self.initializer(np.zeros(self.fshape))
+        s = (x.shape[1] - self.fshape[0]) // self.strides + 1
+        summed_x = x.sum(axis=0)
+        for j in range(s):
+            for i in range(s):
+                filters_err += summed_x[j  * self.strides:j * self.strides + self.fshape[0], i * self.strides:i * self.strides + self.fshape[1], :, np.newaxis]
+        return filters_err * total_layer_err
+    
+
+class AveragePooling2D():
+
+    def __init__(self, pool_size, strides=None):
+        """ Average Pooling layer
+            pool_size: (n x m) tuple
+            strides: int with stride size
+            Example: AveragePooling2D(pool_size=(2,2))
+        """
+        self.pool_size = pool_size
+        self.pool_area = pool_size[0] * pool_size[1]
+        self.cache = None
+        self.initializer = None
+        if strides == None:
+            self.strides = pool_size[0]
+        else:
+            self.strides = strides
+
+    def initialize(self):
+        pass
+
+    def forward(self,x):
+        s = (x.shape[1] - self.pool_size[0]) // self.strides + 1
+        self.initializer = type(x)
+        pooled = self.initializer(np.zeros((x.shape[0], s, s, x.shape[3])))
+        for j in range(s):
+            for i in range(s):
+                pooled[:, j, i, :] = x[:, j * self.strides:j * self.strides + self.pool_size[0], i * self.strides:i * self.strides + self.pool_size[1], :].sum(axis=(1, 2))
+        
+        pooled = pooled / self.pool_area
+        self.cache = x
+        return pooled
+    
+    def backward(self, d_y, learning_rate):
+        x = self.cache
+        d_y_expanded = d_y.repeat(self.pool_size[0], axis=1)
+        d_y_expanded = d_y_expanded.repeat(self.pool_size[1], axis=2)
+        d_x = d_y_expanded * x / self.pool_area
+        return d_x      
 
     
 class Reveal(Layer):
@@ -216,7 +316,7 @@ class Sequential(Model):
                 y_pred = self.forward(x_batch)
                 d_y = loss.derive(y_pred, y_batch)
                 self.backward(d_y, learning_rate)
-            
+
     def predict(self, x, batch_size=32, verbose=0):
         if not isinstance(x, DataLoader): x = DataLoader(x)
         batches = []

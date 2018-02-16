@@ -1,5 +1,6 @@
 import random
 import numpy as np
+from collections import Counter
 
 
 class NativeTensor:
@@ -20,7 +21,11 @@ class NativeTensor:
     
     def __getitem__(self, index):
         return NativeTensor(self.values[index])
-    
+   
+    def __setitem__(self, idx, other):
+        assert isinstance(other, NativeTensor)
+        self.values[idx] = other.values
+        
     def concatenate(self, other):
         assert isinstance(other, NativeTensor), type(other)
         return NativeTensor.from_values(np.concatenate([self.values, other.values]))
@@ -48,6 +53,14 @@ class NativeTensor:
         
     def __add__(x, y):
         return x.add(y)
+    
+    def __iadd__(self,x):
+        if isinstance(x, NativeTensor): self.values = self.values + x.values
+        elif isinstance(y, PublicEncodedTensor): self = PublicEncodedTensor.from_values(x.values).add(y)
+        elif isinstance(y, PrivateEncodedTensor): self = PublicEncodedTensor.from_values(x.values).add(y)
+        else: raise TypeError("does not support %s" % (type(x)))
+        return self
+
     
     def sub(x, y):
         y = NativeTensor.wrap_if_needed(y)
@@ -83,6 +96,9 @@ class NativeTensor:
         
     def __div__(x, y):
         return x.div(y)
+    
+    def __truediv__(x, y):
+        return x.div(y)
         
     def transpose(x):
         return NativeTensor(x.values.T)
@@ -90,8 +106,8 @@ class NativeTensor:
     def neg(x):
         return NativeTensor(0 - x.values)
 
-    def sum(x, axis):
-        return NativeTensor(x.values.sum(axis=axis, keepdims=True))
+    def sum(x, axis, keepdims=False):
+        return NativeTensor(x.values.sum(axis=axis, keepdims=keepdims))
     
     def argmax(x, axis):
         return NativeTensor.from_values(x.values.argmax(axis=axis))
@@ -104,6 +120,14 @@ class NativeTensor:
     
     def inv(x):
         return NativeTensor(1. / x.values)
+    
+    def repeat(self, repeats, axis=None):
+        self.values = np.repeat(self.values, repeats, axis=axis)
+        return self
+    
+    def reshape(self, shape):
+        return NativeTensor(self.values.reshape(shape))
+        
     
 
 DTYPE = 'object'
@@ -163,6 +187,10 @@ class PublicEncodedTensor:
     
     def __getitem__(self, index):
         return PublicEncodedTensor.from_elements(self.elements[index])
+    
+    def __setitem__(self, idx, other):
+        assert isinstance(other, PublicEncodedTensor)
+        self.elements[idx] = other.elements
     
     def concatenate(self, other):
         assert isinstance(other, PublicEncodedTensor), type(other)
@@ -242,12 +270,15 @@ class PublicEncodedTensor:
     
     def __div__(x, y):
         return x.div(y)
+    
+    def __truediv__(x, y):
+        return x.div(y)
         
     def transpose(x):
         return PublicEncodedTensor.from_elements(x.elements.T)
     
-    def sum(x, axis):
-        return PublicEncodedTensor.from_elements(x.elements.sum(axis=axis, keepdims=True))
+    def sum(x, axis, keepdims=False):
+        return PublicEncodedTensor.from_elements(x.elements.sum(axis=axis, keepdims=keepdims))
     
     def argmax(x, axis):
         return PublicEncodedTensor.from_values(decode(x.elements).argmax(axis=axis))
@@ -257,7 +288,14 @@ class PublicEncodedTensor:
     
     def inv(x):
         return PublicEncodedTensor.from_values(1. / decode(x.elements))
-
+    
+    def repeat(self, repeats, axis=None):
+        self.elements = np.repeat(self.elements, repeats, axis=axis)
+        return self
+    
+    def reshape(self, shape):
+        return PublicEncodedTensor(self.elements.reshape(shape))
+        
 
 class PublicFieldTensor:
     
@@ -453,6 +491,12 @@ class PrivateEncodedTensor:
     def __getitem__(self, index):
         return PrivateEncodedTensor.from_shares(self.shares0[index], self.shares1[index])
     
+    def __setitem__(self, idx, other):
+        assert isinstance(other, PrivateEncodedTensor)
+        self.shares0[idx] = other.shares0
+        self.shares1[idx] = other.shares1
+
+    
     def concatenate(self, other):
         assert isinstance(other, PrivateEncodedTensor), type(other)
         shares0 = np.concatenate([self.shares0, other.shares0])
@@ -519,13 +563,19 @@ class PrivateEncodedTensor:
             shares1 = (x.shares1 * y.elements) % Q
             return PrivateEncodedTensor.from_shares(shares0, shares1).truncate()
         if isinstance(y, PrivateEncodedTensor):
-            if precomputed is None: precomputed = generate_mul_triple(x.shape)
+            x_broadcasted0, y_broadcasted0 = np.broadcast_arrays(x.shares0, y.shares0)
+            x_broadcasted1, y_broadcasted1 = np.broadcast_arrays(x.shares1, y.shares1)
+            x_broadcasted = PrivateEncodedTensor.from_shares(x_broadcasted0, x_broadcasted1)        
+            y_broadcasted = PrivateEncodedTensor.from_shares(y_broadcasted0, y_broadcasted1)
+
+                        
+            if precomputed is None: precomputed = generate_mul_triple(x_broadcasted.shape)
             a, b, ab = precomputed
-            assert x.shape == y.shape
-            assert x.shape == a.shape
-            assert y.shape == b.shape
-            alpha = (x - a).reveal()
-            beta  = (y - b).reveal()
+            assert x_broadcasted.shape == y_broadcasted.shape
+            assert x_broadcasted.shape == a.shape
+            assert y_broadcasted.shape == b.shape
+            alpha = (x_broadcasted - a).reveal()
+            beta  = (y_broadcasted - b).reveal()
             z = alpha.mul(beta) + \
                 alpha.mul(b) + \
                 a.mul(beta) + \
@@ -573,6 +623,9 @@ class PrivateEncodedTensor:
         if isinstance(y, PublicEncodedTensor): return x.mul(y.inv())
         raise TypeError("%s does not support %s" % (type(x), type(y)))
     
+    def __truediv__(x, y):
+        return x.div(y)
+    
     def neg(self):
         minus_one = PublicFieldTensor.from_elements(np.array([Q - 1]))
         z = self.mul(minus_one)
@@ -581,11 +634,22 @@ class PrivateEncodedTensor:
     def transpose(self):
         return PrivateEncodedTensor.from_shares(self.shares0.T, self.shares1.T)
     
-    def sum(self, axis):
-        shares0 = self.shares0.sum(axis=axis, keepdims=True) % Q
-        shares1 = self.shares1.sum(axis=axis, keepdims=True) % Q
+    def sum(self, axis, keepdims=False):
+        shares0 = self.shares0.sum(axis=axis, keepdims=keepdims) % Q
+        shares1 = self.shares1.sum(axis=axis, keepdims=keepdims) % Q
         return PrivateEncodedTensor.from_shares(shares0, shares1)
+    
+    
+    def repeat(self, repeats, axis=None):
+        self.shares0 = np.repeat(self.shares0, repeats, axis=axis)
+        self.shares1 = np.repeat(self.shares1, repeats, axis=axis)
+        return self
+    
+    def reshape(self, shape):
+        return PrivateEncodedTensor.from_shares(self.shares0.reshape(shape), self.shares1.reshape(shape)) 
 
+    
+    
 
 ANALYTIC_STORE = []
 NEXT_ID = 0
