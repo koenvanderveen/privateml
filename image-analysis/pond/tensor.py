@@ -102,17 +102,24 @@ class NativeTensor:
         if isinstance(y, PrivateEncodedTensor): return PublicEncodedTensor.from_values(x.values).matmul(y)
         raise TypeError("%s does not support %s" % (type(x), type(y)))
 
-
     def div(x, y):
         y = NativeTensor.wrap_if_needed(y)
         if isinstance(y, NativeTensor): return NativeTensor(x.values / y.values)
         raise TypeError("%s does not support %s" % (type(x), type(y)))
-        
+
     def __div__(x, y):
         return x.div(y)
     
     def __truediv__(x, y):
-        return x.div(y)
+        y = NativeTensor.wrap_if_needed(y)
+        if isinstance(y, NativeTensor): return NativeTensor(x.values ** y.values)
+        raise TypeError("%s does not support %s" % (type(x), type(y)))
+
+    def pow(x, y):
+        return
+
+    def __pow__(x, y):
+        return x.pow(y)
         
     def transpose(x, *axes):
         if axes == ():

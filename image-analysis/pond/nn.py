@@ -130,35 +130,32 @@ class ReluExact(Layer):
         return d_x
 
 
+def compute_coefficients_relu(n_coefficients, domain):
+    assert domain[0] < 0 < domain[1]
+    x = range(domain[0], domain[1])
+    y = [0] * abs(domain[0]) + range(0, domain[1])
+    return np.polyfit(x, y, n_coefficients)
+
+
 class Relu(Layer):
 
-    def __init__(self):
+    def __init__(self, n_coefficients=9, domain=(-100, 100)):
         self.cache = None
+        self.coeff = compute_coefficients_relu(n_coefficients, domain)
+        self.coeff_dir = np.multiply(self.coeff, range(len(self.coeff))[::-1])[:-1]
 
     def initialize(self):
         pass
 
     def forward(self, x):
-        w0 = 0.5
-        w1 = 0.2159198015
-        w3 = -0.0082176259
-        w5 = 0.0001825597
-        w7 = -0.0000018848
-        w9 = 0.0000000072
-
-        x2 = x * x
-        x3 = x2 * x
-        x5 = x2 * x3
-        x7 = x2 * x5
-        x9 = x2 * x7
-        y = x9 * w9 + x7 * w7 + x5 * w5 + x3 * w3 + x * w1 + w0
-
-        self.cache = y
+        x_powers = [x ** i for i in range(len(self.coeff))][::-1]
+        y = x_powers.dot(self.coeff)
+        self.cache = x_powers[1:]
         return y
 
     def backward(self, d_y, learning_rate):
-        y = self.cache
-        d_x = d_y * y * (y.neg() + 1)
+        x_powers = self.cache
+        d_x = d_y * x_powers.dot(self.coeff_dir)
         return d_x
 
 
