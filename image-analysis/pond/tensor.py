@@ -1,5 +1,6 @@
 import random
 import numpy as np
+import sys
 from collections import Counter
 
 
@@ -7,7 +8,7 @@ class NativeTensor:
     
     def __init__(self, values):
         self.values = values
-        
+
     def from_values(values):
         return NativeTensor(values)
     
@@ -61,7 +62,12 @@ class NativeTensor:
         else: raise TypeError("does not support %s" % (type(x)))
         return self
 
-    
+    def add_at(self, indices, y):
+        if isinstance(y, NativeTensor):
+            np.add.at(self.values, indices, y.values)
+        else:
+            raise TypeError("%s does not support %s" % (type(x), type(y)))
+
     def sub(x, y):
         y = NativeTensor.wrap_if_needed(y)
         if isinstance(y, NativeTensor): return NativeTensor(x.values - y.values)
@@ -88,7 +94,15 @@ class NativeTensor:
         if isinstance(y, PublicEncodedTensor): return PublicEncodedTensor.from_values(x.values).dot(y)
         if isinstance(y, PrivateEncodedTensor): return PublicEncodedTensor.from_values(x.values).dot(y)
         raise TypeError("%s does not support %s" % (type(x), type(y)))
-        
+
+    def matmul(x, y):
+        y = NativeTensor.wrap_if_needed(y)
+        if isinstance(y, NativeTensor): return NativeTensor(np.matmul(x.values, y.values))
+        if isinstance(y, PublicEncodedTensor): return PublicEncodedTensor.from_values(x.values).matmul(y)
+        if isinstance(y, PrivateEncodedTensor): return PublicEncodedTensor.from_values(x.values).matmul(y)
+        raise TypeError("%s does not support %s" % (type(x), type(y)))
+
+
     def div(x, y):
         y = NativeTensor.wrap_if_needed(y)
         if isinstance(y, NativeTensor): return NativeTensor(x.values / y.values)
@@ -100,8 +114,11 @@ class NativeTensor:
     def __truediv__(x, y):
         return x.div(y)
         
-    def transpose(x):
-        return NativeTensor(x.values.T)
+    def transpose(x, *axes):
+        if axes == ():
+            return NativeTensor(x.values.transpose())
+        else:
+            return NativeTensor(x.values.transpose(axes))
     
     def neg(x):
         return NativeTensor(0 - x.values)
@@ -125,8 +142,14 @@ class NativeTensor:
         self.values = np.repeat(self.values, repeats, axis=axis)
         return self
     
-    def reshape(self, shape):
+    def reshape(self, *shape):
+        # ugly hack to unwrap shape if the shape is given as a tuple
+        if isinstance(shape[0], tuple):
+            shape = shape[0]
         return NativeTensor(self.values.reshape(shape))
+
+    def pad(self, pad_width, mode='constant'):
+        return NativeTensor(np.pad(self.values, pad_width=pad_width, mode=mode))
         
     
 
@@ -230,7 +253,20 @@ class PublicEncodedTensor:
         
     def __add__(x, y):
         return x.add(y)
-        
+
+    def add_at(x, indices, y):
+
+        y = wrap_if_needed(y)
+        if isinstance(y, PublicEncodedTensor):
+            np.add.at(x.elements, indices, y.elements)
+        # if isinstance(y, PrivateEncodedTensor):
+        #     shares0 = np.add.at(x.elements, indices, y.shares0) % Q
+        #     shares1 = y.shares1
+        #     return PrivateEncodedTensor.from_shares(shares0, shares1)
+        else:
+            raise TypeError("%s does not support %s" % (type(x), type(y)))
+
+
     def sub(x, y):
         y = wrap_if_needed(y)
         if isinstance(y, PublicEncodedTensor): return PublicEncodedTensor.from_elements((x.elements - y.elements) % Q)
@@ -267,15 +303,21 @@ class PublicEncodedTensor:
         if isinstance(y, NativeTensor): return x.mul(y.inv())
         if isinstance(y, PublicEncodedTensor): return x.mul(y.inv())
         raise TypeError("%s does not support %s" % (type(x), type(y)))
-    
+
+    def matmul(x, y):
+        return PublicEncodedTensor(np.matmul(x.elements, y.elements))
+
     def __div__(x, y):
         return x.div(y)
     
     def __truediv__(x, y):
         return x.div(y)
         
-    def transpose(x):
-        return PublicEncodedTensor.from_elements(x.elements.T)
+    def transpose(x, *axes):
+        if axes == ():
+            return PublicEncodedTensor.from_elements(x.elements.transpose())
+        else:
+            return PublicEncodedTensor.from_elements(x.elements.transpose(axes))
     
     def sum(x, axis, keepdims=False):
         return PublicEncodedTensor.from_elements(x.elements.sum(axis=axis, keepdims=keepdims))
@@ -293,9 +335,15 @@ class PublicEncodedTensor:
         self.elements = np.repeat(self.elements, repeats, axis=axis)
         return self
     
-    def reshape(self, shape):
-        return PublicEncodedTensor(self.elements.reshape(shape))
-        
+    def reshape(self, *shape):
+        # ugly hack to unwrap shape if the shape is given as a tuple
+        if isinstance(shape[0], tuple):
+            shape = shape[0]
+        return PublicEncodedTensor.from_elements(self.elements.reshape(shape))
+
+    def pad(self, pad_width, mode='constant'):
+        return PublicEncodedTensor.from_elements(np.pad(self.elements, pad_width=pad_width, mode=mode))
+
 
 class PublicFieldTensor:
     
@@ -354,8 +402,8 @@ class PublicFieldTensor:
 
 
 def share(elements):
-    shares0 = np.array([ random.randrange(Q) for _ in range(elements.size) ]).astype(DTYPE).reshape(elements.shape)
-    shares1 = (elements - shares0) % Q
+    shares0 = np.array([ random.randrange(Q) for _ in range(elements.size)]).astype(DTYPE).reshape(elements.shape)
+    shares1 = ((elements - shares0) % Q).astype(DTYPE)
     return shares0, shares1
 
 def reconstruct(shares0, shares1):
@@ -409,7 +457,8 @@ class PrivateFieldTensor:
         
     def __add__(x, y):
         return x.add(y)
-    
+
+
     def mul(x, y):
         if isinstance(y, PublicFieldTensor):
             shares0 = (x.shares0 * y.elements) % Q
@@ -444,6 +493,16 @@ def generate_dot_triple(m, n, o):
            PrivateFieldTensor.from_elements(b), \
            PrivateFieldTensor.from_elements(ab)
 
+
+def generate_matmul_triple(shape1, shape2):
+    a = np.array([ random.randrange(Q) for _ in range(m*n) ]).astype(DTYPE).reshape(shape1)
+    b = np.array([ random.randrange(Q) for _ in range(n*o) ]).astype(DTYPE).reshape(shape2)
+    ab = np.matmul(a, b)
+    return PrivateFieldTensor.from_elements(a), \
+           PrivateFieldTensor.from_elements(b), \
+           PrivateFieldTensor.from_elements(ab)
+
+
 # def generate_mul_triple(shape):
 #     a = np.zeros(shape).astype(int).astype(DTYPE)
 #     b = np.zeros(shape).astype(int).astype(DTYPE)
@@ -470,6 +529,7 @@ class PrivateEncodedTensor:
             shares0, shares1 = share(encode(values))
         assert isinstance(shares0, np.ndarray), "%s, %s, %s" % (values, shares0, type(shares0))
         assert isinstance(shares1, np.ndarray), "%s, %s, %s" % (values, shares1, type(shares1))
+        assert shares0.dtype == shares1.dtype
         assert shares0.shape == shares1.shape
         self.shares0 = shares0
         self.shares1 = shares1
@@ -536,7 +596,21 @@ class PrivateEncodedTensor:
         
     def __add__(x, y):
         return x.add(y)
-    
+
+    def add_at(x, indices, y):
+        y = wrap_if_needed(y)
+        if isinstance(y, PublicEncodedTensor):
+            np.add.at(x.shares0, indices, y.elements)
+            x.shares0 = x.shares0 % Q
+        elif isinstance(y, PrivateEncodedTensor):
+            np.add.at(x.shares0, indices, y.shares0)
+            np.add.at(x.shares1, indices, y.shares1)
+            x.shares0 = x.shares0 % Q
+            x.shares1 = x.shares1 % Q
+        else:
+            raise TypeError("%s does not support %s" % (type(x), type(y)))
+
+
     def sub(x, y):
         y = wrap_if_needed(y)
         if isinstance(y, PublicEncodedTensor):
@@ -575,7 +649,7 @@ class PrivateEncodedTensor:
             assert x_broadcasted.shape == a.shape
             assert y_broadcasted.shape == b.shape
             alpha = (x_broadcasted - a).reveal()
-            beta  = (y_broadcasted - b).reveal()
+            beta = (y_broadcasted - b).reveal()
             z = alpha.mul(beta) + \
                 alpha.mul(b) + \
                 a.mul(beta) + \
@@ -622,7 +696,25 @@ class PrivateEncodedTensor:
         if isinstance(y, NativeTensor): return x.mul(y.inv())
         if isinstance(y, PublicEncodedTensor): return x.mul(y.inv())
         raise TypeError("%s does not support %s" % (type(x), type(y)))
-    
+
+    def matmul(x, y):
+        y = wrap_if_needed(y)
+        if isinstance(y, PublicEncodedTensor):
+            shares0 = np.matmul(x.shares0, y.elements) % Q
+            shares1 = np.matmul(x.shares1, y.elements) % Q
+            return PrivateEncodedTensor.from_shares(shares0, shares1).truncate()
+        if isinstance(y, PrivateEncodedTensor):
+            if precomputed is None: precomputed = generate_matmul_triple(x.shape, y.shape)
+            a, b, ab = precomputed
+            alpha = (x - a).reveal()
+            beta  = (y - b).reveal()
+            z = np.matmul(alpha, beta) + \
+                np.matmul(alpha, b) + \
+                np.matmul(a, beta) + \
+                ab
+            return PrivateEncodedTensor.from_shares(z.shares0, z.shares1).truncate()
+        raise TypeError("%s does not support %s" % (type(x), type(y)))
+
     def __truediv__(x, y):
         return x.div(y)
     
@@ -631,8 +723,13 @@ class PrivateEncodedTensor:
         z = self.mul(minus_one)
         return PrivateEncodedTensor.from_shares(z.shares0, z.shares1)
         
-    def transpose(self):
-        return PrivateEncodedTensor.from_shares(self.shares0.T, self.shares1.T)
+    def transpose(self, *axes):
+        if axes == ():
+            return PrivateEncodedTensor.from_shares(self.shares0.transpose(), self.shares1.transpose())
+        else:
+            return PrivateEncodedTensor.from_shares(self.shares0.transpose(axes), self.shares1.transpose(axes))
+
+
     
     def sum(self, axis, keepdims=False):
         shares0 = self.shares0.sum(axis=axis, keepdims=keepdims) % Q
@@ -645,8 +742,16 @@ class PrivateEncodedTensor:
         self.shares1 = np.repeat(self.shares1, repeats, axis=axis)
         return self
     
-    def reshape(self, shape):
-        return PrivateEncodedTensor.from_shares(self.shares0.reshape(shape), self.shares1.reshape(shape)) 
+    def reshape(self, *shape):
+        # ugly hack to unwrap shape if the shape is given as a tuple
+        if isinstance(shape[0], tuple):
+            shape = shape[0]
+        return PrivateEncodedTensor.from_shares(self.shares0.reshape(shape), self.shares1.reshape(shape))
+
+
+    def pad(self, pad_width, mode='constant'):
+        return PrivateEncodedTensor.from_shares(np.pad(self.shares0, pad_width=pad_width, mode=mode),
+                                                np.pad(self.shares1, pad_width=pad_width, mode=mode))
 
     
     
