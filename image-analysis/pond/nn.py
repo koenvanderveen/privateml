@@ -18,7 +18,7 @@ class Dense(Layer):
         
     def initialize(self):
         self.weights = np.random.randn(self.num_features, self.num_nodes) * self.initial_scale
-        self.bias    = np.zeros((1, self.num_nodes))
+        self.bias = np.zeros((1, self.num_nodes))
         
     def forward(self, x):
         y = x.dot(self.weights) + self.bias
@@ -32,7 +32,7 @@ class Dense(Layer):
         d_weights = x.transpose().dot(d_y)
         d_bias = d_y.sum(axis=0)
         self.weights = (d_weights * learning_rate).neg() + self.weights
-        self.bias    =    (d_bias * learning_rate).neg() + self.bias
+        self.bias = (d_bias * learning_rate).neg() + self.bias
         # compute and return external gradient
         d_x = d_y.dot(self.weights.transpose())
         return d_x
@@ -66,14 +66,14 @@ class Sigmoid(Layer):
         pass
     
     def forward(self, x):
-        w0 =  0.5
-        w1 =  0.2159198015
+        w0 = 0.5
+        w1 = 0.2159198015
         w3 = -0.0082176259
-        w5 =  0.0001825597
+        w5 = 0.0001825597
         w7 = -0.0000018848
-        w9 =  0.0000000072
+        w9 = 0.0000000072
         
-        x2 = x  * x
+        x2 = x * x
         x3 = x2 * x
         x5 = x2 * x3        
         x7 = x2 * x5        
@@ -112,6 +112,56 @@ class Softmax(Layer):
         return d_scores
 
 
+class ReluExact(Layer):
+
+    def __init__(self):
+        self.cache = None
+
+    def initialize(self):
+        pass
+
+    def forward(self, x):
+        y = x * (x > 0)
+        self.cache = y
+        return y
+
+    def backward(self, d_y, learning_rate):
+        d_x = (d_y > 0)
+        return d_x
+
+
+class Relu(Layer):
+
+    def __init__(self):
+        self.cache = None
+
+    def initialize(self):
+        pass
+
+    def forward(self, x):
+        w0 = 0.5
+        w1 = 0.2159198015
+        w3 = -0.0082176259
+        w5 = 0.0001825597
+        w7 = -0.0000018848
+        w9 = 0.0000000072
+
+        x2 = x * x
+        x3 = x2 * x
+        x5 = x2 * x3
+        x7 = x2 * x5
+        x9 = x2 * x7
+        y = x9 * w9 + x7 * w7 + x5 * w5 + x3 * w3 + x * w1 + w0
+
+        self.cache = y
+        return y
+
+    def backward(self, d_y, learning_rate):
+        y = self.cache
+        d_x = d_y * y * (y.neg() + 1)
+        return d_x
+
+
 class Dropout(Layer):
     # TODO
     pass
@@ -131,7 +181,6 @@ class Flatten(Layer):
     
     def backward(self, d_y, learning_rate):
         return d_y.reshape(self.shape)
-                   
 
 
 class Conv2D():
@@ -276,7 +325,8 @@ class DataLoader:
         self.wrapper = wrapper
         
     def batches(self, batch_size=None):
-        if batch_size is None: batch_size = data.shape[0]
+        if batch_size is None:
+            batch_size = data.shape[0]
         return ( 
             self.wrapper(self.data[i:i+batch_size]) 
             for i in range(0, self.data.shape[0], batch_size) 
@@ -325,4 +375,3 @@ class Sequential(Model):
             y_batch = self.forward(x_batch)
             batches.append(y_batch)
         return reduce(lambda x, y: x.concatenate(y), batches)
-        
