@@ -159,7 +159,9 @@ class Conv2D():
         fmap = self.initializer(np.zeros((x.shape[0], s, s, self.fshape[-1])))
         for j in range(s):
             for i in range(s):
-                fmap[:, j, i, :] = (x[:, j * self.strides:j * self.strides + self.fshape[0], i * self.strides:i * self.strides + self.fshape[1], :, np.newaxis] * self.filters).sum(axis=(1, 2, 3))
+                fmap[:, j, i, :] = (x[:, j * self.strides:j * self.strides + self.fshape[0],
+                                    i * self.strides:i * self.strides + self.fshape[1],
+                                    :, np.newaxis] * self.filters).sum(axis=(1, 2, 3))
         self.cache = x
         return fmap
     
