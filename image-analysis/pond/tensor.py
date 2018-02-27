@@ -113,7 +113,12 @@ class NativeTensor:
     
     def __truediv__(x, y):
         return x.div(y)
-        
+
+    def __gt__(x, y):
+        y = NativeTensor.wrap_if_needed(y)
+        if isinstance(y, NativeTensor): return NativeTensor(x.values > y.values)
+        raise TypeError("%s does not support %s" % (type(x), type(y)))
+
     def transpose(x, *axes):
         if axes == ():
             return NativeTensor(x.values.transpose())
@@ -133,7 +138,8 @@ class NativeTensor:
         return NativeTensor(np.exp(x.values))
     
     def log(x):
-        return NativeTensor(np.log(x.values))
+        # use this log to set log 0 -> 0
+        return NativeTensor(np.ma.log(x.values).filled(0))
     
     def inv(x):
         return NativeTensor(1. / x.values)
@@ -275,7 +281,12 @@ class PublicEncodedTensor:
         
     def __sub__(x, y):
         return x.sub(y)
-        
+
+    def __gt__(x, y):
+        y = wrap_if_needed(y)
+        if isinstance(y, PublicEncodedTensor): return PublicEncodedTensor(x.elements > y.elements)
+        raise TypeError("%s does not support %s" % (type(x), type(y)))
+
     def mul(x, y):
         y = wrap_if_needed(y)
         if isinstance(y, PublicFieldTensor): return PublicFieldTensor.from_elements((x.elements * y.elements) % Q)

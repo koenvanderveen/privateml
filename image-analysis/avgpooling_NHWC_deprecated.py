@@ -1,4 +1,4 @@
-class AveragePooling2D():
+class AveragePooling2D_NHWC():
     def __init__(self, pool_size, strides=None):
         """ Average Pooling layer
             pool_size: (n x m) tuple

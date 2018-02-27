@@ -48,8 +48,6 @@ def col2im_indices(cols, x_shape, x_type, field_height=3, field_width=3, padding
                                  stride)
     cols_reshaped = cols.reshape(C * field_height * field_width, -1, N)
     cols_reshaped = cols_reshaped.transpose(2, 0, 1)
-    print(cols_reshaped.shape)
-    print(x_padded.shape)
     x_padded.add_at((slice(None), k, i, j), cols_reshaped)
     if padding == 0:
         return x_padded
