@@ -103,7 +103,8 @@ class Softmax(Layer):
         pass
     
     def forward(self, x):
-        likelihoods = x.exp()
+        # we add the - x.max() for numerical stability, i.e. to prevent overflow
+        likelihoods = (x - x.max(axis=1, keepdims=True)).exp()
         probs = likelihoods.div(likelihoods.sum(axis=1, keepdims=True))
         self.cache = probs
         return probs
@@ -235,6 +236,7 @@ class Conv2D():
         return out
 
     def backward(self, d_y, learning_rate):
+        # print(d_y.sum())
         X_col = self.cache
         h_filter, w_filter, d_filter, n_filter = self.filters.shape
 
@@ -352,7 +354,7 @@ class AveragePooling2D():
         x = self.cache
         d_y_expanded = d_y.repeat(self.pool_size[0], axis=2)
         d_y_expanded = d_y_expanded.repeat(self.pool_size[1], axis=3)
-        d_x = d_y_expanded * x / self.pool_area
+        d_x = (d_y_expanded * x) / self.pool_area
         return d_x
 
 
@@ -491,7 +493,7 @@ class Sequential(Model):
         sys.stdout.write('\r')
         sys.stdout.flush()
         progress = (batch_index / n_batches)
-        progress_bar = "=" * int(progress * 30) + (progress<30) * ">" + (int((1 - progress) * 30) - 1) * "."
+        progress_bar = "=" * int(progress * 30) + (progress < 1) * ">" + (int((1 - progress) * 30) - 1) * "."
 
         if val_loss is None:
             message = "{}/{} [{}] - train_loss: {} - train_acc {}"
@@ -541,6 +543,9 @@ class Sequential(Model):
                         val_acc = np.mean(y_valid.all_data().unwrap().argmax(axis=1) == y_pred_val.unwrap().argmax(axis=1))
                         self.print_progress(batch_index, n_batches, batch_size, train_acc=acc, train_loss=train_loss,
                                             val_loss=val_loss, val_acc=val_acc)
+
+            # newline after progressbar
+            print()
 
 
 
