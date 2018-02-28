@@ -4,7 +4,6 @@ from datetime import datetime
 from functools import reduce
 from pond.tensor import NativeTensor, PrivateEncodedTensor, PublicEncodedTensor
 from im2col import im2col_indices, col2im_indices
-from tqdm import tqdm
 import math
 
 
@@ -139,33 +138,44 @@ class ReluExact(Layer):
         return d_x
 
 
-def compute_coefficients_relu(n_coefficients, domain):
-    assert domain[0] < 0 < domain[1]
-    x = list(range(domain[0], domain[1]))
-    y = [0] * abs(domain[0]) + list(range(0, domain[1]))
-    return np.polyfit(x, y, n_coefficients)
-
-
 class Relu(Layer):
 
-    def __init__(self, n_coefficients=9, domain=(-100, 100)):
+    def __init__(self, order=9, domain=(-100, 100)):
         self.cache = None
-        self.coeff = compute_coefficients_relu(n_coefficients, domain)
-        self.coeff_dir = np.multiply(self.coeff, range(len(self.coeff))[::-1])[:-1]
+        self.n_coeff = order + 1
+        self.coeff = NativeTensor(self.compute_coefficients_relu(order, domain))
+        self.coeff_der = (self.coeff * NativeTensor(list(range(self.n_coeff))[::-1]))[:-1]
 
     def initialize(self):
         pass
 
     def forward(self, x):
-        x_powers = np.array([x ** i for i in range(len(self.coeff))][::-1])
-        y = x_powers.dot(self.coeff)
-        self.cache = x_powers[1:]
+        x.expand_dims(axis=4).repeat(self.n_coeff, axis=4)
+
+        for i in range(self.n_coeff)[::-1]:
+            # x[:, :, :, :, i] = x[:, :, :, :, i] ** i
+            x[:, :, :, :, i] **= i
+
+        y = x.dot(self.coeff)
+        self.cache = x[:, :, :, :, 1:]
         return y
 
     def backward(self, d_y, learning_rate):
-        x_powers = self.cache
-        d_x = d_y * x_powers.dot(self.coeff_dir)
+        x = self.cache
+        d_x = d_y * x.dot(self.coeff_der)
         return d_x
+
+    def relu_der(self, x):
+        x_powers = np.array([x ** i for i in range(self.n_coeff - 1)][::-1]).T
+        y = x_powers.dot(self.coeff_der)
+        return y
+
+    @staticmethod
+    def compute_coefficients_relu(order, domain):
+        assert domain[0] < 0 < domain[1]
+        x = list(range(domain[0], domain[1]))
+        y = [0] * abs(domain[0]) + list(range(0, domain[1]))
+        return np.polyfit(x, y, order)
 
 
 class Dropout(Layer):
@@ -219,12 +229,11 @@ class Conv2D():
         h_filter, w_filter, d_filters, n_filters = self.filters.shape
         n_x, d_x, h_x, w_x = x.shape
 
-
         h_out = int((h_x - h_filter + 2 * self.padding) / self.strides + 1)
         w_out = int((w_x - w_filter + 2 * self.padding) / self.strides + 1)
 
-        X_col = im2col_indices(x, field_height=h_filter, field_width=w_filter,
-                               padding=self.padding, stride=self.strides)
+        X_col = im2col_indices(x, field_height=h_filter, field_width=w_filter, padding=self.padding,
+                               stride=self.strides)
         W_col = self.filters.reshape(n_filters, -1)
         # multiplication
         out = W_col.dot(X_col)
@@ -448,7 +457,6 @@ class SoftmaxCrossEntropy(Loss):
     pass
 
 
-
 class DataLoader:
     
     def __init__(self, data, wrapper=lambda x: x):
@@ -489,7 +497,8 @@ class Sequential(Model):
         for layer in reversed(self.layers):
             d_y = layer.backward(d_y, learning_rate)
 
-    def print_progress(self, batch_index, n_batches, batch_size, train_loss=None, train_acc=None,
+    @staticmethod
+    def print_progress(batch_index, n_batches, batch_size, train_loss=None, train_acc=None,
                        val_loss = None, val_acc=None):
         sys.stdout.write('\r')
         sys.stdout.flush()
@@ -497,11 +506,11 @@ class Sequential(Model):
         progress_bar = "=" * int(progress * 30) + (progress < 1) * ">" + (int((1 - progress) * 30) - 1) * "."
 
         if val_loss is None:
-            message = "{}/{} [{}] - train_loss: {} - train_acc {}"
+            message = "{}/{} [{}] - train_loss: {:.5f} - train_acc {:.5f}"
             sys.stdout.write(message.format((batch_index+1) * batch_size, n_batches * batch_size, progress_bar,
                                             train_loss, train_acc))
         else:
-            message = "{}/{} [{}] - train_los: {} - train_acc {} - val_loss {} - val_acc {}"
+            message = "{}/{} [{}] - train_los: {:.5f} - train_acc {:.5f} - val_loss {:.5f} - val_acc {:.5f}"
             sys.stdout.write(message.format((batch_index+1) * batch_size, n_batches * batch_size, progress_bar, train_loss,
                                             train_acc, val_loss, val_acc))
 
@@ -516,7 +525,6 @@ class Sequential(Model):
         if x_valid is not None:
             if not isinstance(x_valid, DataLoader): x_valid = DataLoader(x_valid)
             if not isinstance(y_train, DataLoader): y_valid = DataLoader(y_valid)
-
 
         for epoch in range(epochs):
             if verbose >= 1: print(datetime.now(), "Epoch %s" % epoch )
@@ -545,10 +553,8 @@ class Sequential(Model):
                         self.print_progress(batch_index, n_batches, batch_size, train_acc=acc, train_loss=train_loss,
                                             val_loss=val_loss, val_acc=val_acc)
 
-            # newline after progressbar
+            # Newline after progressbar.
             print()
-
-
 
     def predict(self, x, batch_size=32, verbose=0):
         if not isinstance(x, DataLoader): x = DataLoader(x)
