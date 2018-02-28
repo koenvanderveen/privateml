@@ -1,7 +1,7 @@
 import keras
 import numpy as np
 from pond.tensor import NativeTensor, PrivateEncodedTensor, PublicEncodedTensor
-from pond.nn import Dense, Sigmoid, Relu, Reveal, Diff, Softmax, CrossEntropy, Sequential, DataLoader, Conv2D, \
+from pond.nn import Dense, Sigmoid, Relu, ReluExact, Reveal, Diff, Softmax, CrossEntropy, Sequential, DataLoader, Conv2D, \
     AveragePooling2D, Flatten
 from keras.utils import to_categorical
 import datetime
@@ -16,7 +16,9 @@ y_test = to_categorical(y_test, 10)
 # NativeTensor.
 classifier = Sequential([
     Conv2D((4, 4, 1, 20), strides=2, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
-    Relu(),
+    # Relu(order=9, domain=(-10, 10)),
+    ReluExact(),
+    # Sigmoid(),
     AveragePooling2D(pool_size=(2, 2)),
     Flatten(),
     Dense(10, 980),
@@ -33,7 +35,7 @@ classifier.fit(
     y_valid=DataLoader(y_test, wrapper=NativeTensor),
     loss=CrossEntropy(),
     epochs=1,
-    batch_size=600,
+    batch_size=500,
     verbose=1,
 )
 

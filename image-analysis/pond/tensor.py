@@ -93,10 +93,7 @@ class NativeTensor:
 
     def dot(x, y):
         y = NativeTensor.wrap_if_needed(y)
-        if isinstance(y, NativeTensor):
-            # print(x.values)
-            # print(y.values)
-            return NativeTensor(x.values.dot(y.values))
+        if isinstance(y, NativeTensor): return NativeTensor(x.values.dot(y.values))
         if isinstance(y, PublicEncodedTensor): return PublicEncodedTensor.from_values(x.values).dot(y)
         if isinstance(y, PrivateEncodedTensor): return PublicEncodedTensor.from_values(x.values).dot(y)
         raise TypeError("%s does not support %s" % (type(x), type(y)))

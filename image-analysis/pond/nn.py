@@ -151,8 +151,8 @@ class Relu(Layer):
         x.expand_dims(axis=4).repeat(self.n_coeff, axis=4)
 
         for i in range(self.n_coeff)[::-1]:
-            x[:, :, :, :, i] = x[:, :, :, :, i] ** i
-            # x[:, :, :, :, i] **= i
+            # x[:, :, :, :, i] = x[:, :, :, :, i] ** i
+            x[:, :, :, :, i] **= i
 
         y = x.dot(self.coeff)
         self.cache = x[:, :, :, :, 1:]
@@ -496,7 +496,8 @@ class Sequential(Model):
         for layer in reversed(self.layers):
             d_y = layer.backward(d_y, learning_rate)
 
-    def print_progress(self, batch_index, n_batches, batch_size, train_loss=None, train_acc=None,
+    @staticmethod
+    def print_progress(batch_index, n_batches, batch_size, train_loss=None, train_acc=None,
                        val_loss = None, val_acc=None):
         sys.stdout.write('\r')
         sys.stdout.flush()
@@ -504,11 +505,11 @@ class Sequential(Model):
         progress_bar = "=" * int(progress * 30) + (progress < 1) * ">" + (int((1 - progress) * 30) - 1) * "."
 
         if val_loss is None:
-            message = "{}/{} [{}] - train_loss: {} - train_acc {}"
+            message = "{}/{} [{}] - train_loss: {:.5f} - train_acc {:.5f}"
             sys.stdout.write(message.format((batch_index+1) * batch_size, n_batches * batch_size, progress_bar,
                                             train_loss, train_acc))
         else:
-            message = "{}/{} [{}] - train_los: {} - train_acc {} - val_loss {} - val_acc {}"
+            message = "{}/{} [{}] - train_los: {:.5f} - train_acc {:.5f} - val_loss {:.5f} - val_acc {:.5f}"
             sys.stdout.write(message.format((batch_index+1) * batch_size, n_batches * batch_size, progress_bar, train_loss,
                                             train_acc, val_loss, val_acc))
 
