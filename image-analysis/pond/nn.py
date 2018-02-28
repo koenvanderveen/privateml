@@ -138,8 +138,8 @@ class ReluExact(Layer):
 
 def compute_coefficients_relu(n_coefficients, domain):
     assert domain[0] < 0 < domain[1]
-    x = range(domain[0], domain[1])
-    y = [0] * abs(domain[0]) + range(0, domain[1])
+    x = list(range(domain[0], domain[1]))
+    y = [0] * abs(domain[0]) + list(range(0, domain[1]))
     return np.polyfit(x, y, n_coefficients)
 
 
@@ -154,7 +154,7 @@ class Relu(Layer):
         pass
 
     def forward(self, x):
-        x_powers = [x ** i for i in range(len(self.coeff))][::-1]
+        x_powers = np.array([x ** i for i in range(len(self.coeff))][::-1])
         y = x_powers.dot(self.coeff)
         self.cache = x_powers[1:]
         return y
