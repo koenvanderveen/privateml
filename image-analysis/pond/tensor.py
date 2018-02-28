@@ -141,11 +141,14 @@ class NativeTensor:
     def neg(x):
         return NativeTensor(0 - x.values)
 
-    def sum(x, axis, keepdims=False):
+    def sum(x, axis=None, keepdims=False):
         return NativeTensor(x.values.sum(axis=axis, keepdims=keepdims))
 
     def argmax(x, axis):
         return NativeTensor.from_values(x.values.argmax(axis=axis))
+
+    def max(x, axis, keepdims=False):
+        return NativeTensor.from_values(x.values.max(axis=axis, keepdims=keepdims))
 
     def exp(x):
         return NativeTensor(np.exp(x.values))
