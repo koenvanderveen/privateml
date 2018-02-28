@@ -22,8 +22,8 @@ class Dense(Layer):
         self.bias = None
         
     def initialize(self):
-        self.weights = np.random.randn(self.num_features, self.num_nodes) * self.initial_scale
-        self.bias = np.zeros((1, self.num_nodes))
+        self.weights = NativeTensor(np.random.randn(self.num_features, self.num_nodes) * self.initial_scale)
+        self.bias = NativeTensor(np.zeros((1, self.num_nodes)))
         
     def forward(self, x):
         y = x.dot(self.weights) + self.bias
@@ -31,10 +31,12 @@ class Dense(Layer):
         self.cache = x
         return y
 
-    def backward(self, d_y, learning_rate):
+    def backward(self, d_y, learning_rate, l2reg_lambda=0.00):
         x = self.cache
         # compute gradients for internal parameters and update
         d_weights = x.transpose().dot(d_y)
+        d_weights += self.weights * (l2reg_lambda / x.shape[0])
+
         d_bias = d_y.sum(axis=0)
         self.weights = (d_weights * learning_rate).neg() + self.weights
         self.bias = (d_bias * learning_rate).neg() + self.bias
@@ -236,7 +238,6 @@ class Conv2D():
         return out
 
     def backward(self, d_y, learning_rate):
-        # print(d_y.sum())
         X_col = self.cache
         h_filter, w_filter, d_filter, n_filter = self.filters.shape
 

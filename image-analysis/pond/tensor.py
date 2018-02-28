@@ -55,11 +55,11 @@ class NativeTensor:
     def __add__(x, y):
         return x.add(y)
     
-    def __iadd__(self,x):
-        if isinstance(x, NativeTensor): self.values = self.values + x.values
-        elif isinstance(y, PublicEncodedTensor): self = PublicEncodedTensor.from_values(x.values).add(y)
-        elif isinstance(y, PrivateEncodedTensor): self = PublicEncodedTensor.from_values(x.values).add(y)
-        else: raise TypeError("does not support %s" % (type(x)))
+    def __iadd__(self, y):
+        if isinstance(y, NativeTensor): self.values = self.values + y.values
+        elif isinstance(y, PublicEncodedTensor): self = PublicEncodedTensor.from_values(self.values).add(y)
+        elif isinstance(y, PrivateEncodedTensor): self = PublicEncodedTensor.from_values(self.values).add(y)
+        else: raise TypeError("does not support %s" % (type(y)))
         return self
 
     def add_at(self, indices, y):
@@ -70,6 +70,12 @@ class NativeTensor:
 
     def sub(x, y):
         y = NativeTensor.wrap_if_needed(y)
+        try:
+            if isinstance(y, NativeTensor): return NativeTensor(x.values * y.values)
+        except FloatingPointError:
+            print(x.values)
+            print(y.values)
+            exit()
         if isinstance(y, NativeTensor): return NativeTensor(x.values - y.values)
         if isinstance(y, PublicEncodedTensor): return PublicEncodedTensor.from_values(x.values).sub(y)
         if isinstance(y, PrivateEncodedTensor): return PublicEncodedTensor.from_values(x.values).sub(y)
@@ -80,9 +86,16 @@ class NativeTensor:
     
     def mul(x, y):
         y = NativeTensor.wrap_if_needed(y)
-        if isinstance(y, NativeTensor): return NativeTensor(x.values * y.values)
+        try:
+            if isinstance(y, NativeTensor): return NativeTensor(x.values * y.values)
+        except FloatingPointError:
+            print(x.values)
+            print(y.values)
+            exit()
+
         if isinstance(y, PublicEncodedTensor): return PublicEncodedTensor.from_values(x.values).mul(y)
         if isinstance(y, PrivateEncodedTensor): return PublicEncodedTensor.from_values(x.values).mul(y)
+        if isinstance(y, float): return NativeTensor(x.values * y)
         raise TypeError("%s does not support %s" % (type(x), type(y)))
         
     def __mul__(x, y):
