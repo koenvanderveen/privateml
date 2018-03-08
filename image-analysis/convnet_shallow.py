@@ -15,14 +15,12 @@ y_test = to_categorical(y_test, 10)
 
 # NativeTensor.
 classifier = Sequential([
-    Conv2D((4, 4, 1, 20), strides=2, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp),
-           l2reg_lambda=1.0),
-    # Relu(order=9, domain=(-10, 10)),
+    Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp),
+           l2reg_lambda=5.0),
     ReluExact(),
-    # Sigmoid(),
-    AveragePooling2D(pool_size=(2, 2)),
+    AveragePooling2D(pool_size=(4, 4)),
     Flatten(),
-    Dense(10, 980, l2reg_lambda=1.0),
+    Dense(10, 1568, l2reg_lambda=5.0),
     Reveal(),
     Softmax()
 ])
@@ -36,7 +34,7 @@ classifier.fit(
     y_valid=DataLoader(y_test, wrapper=NativeTensor),
     loss=CrossEntropy(),
     epochs=5,
-    batch_size=32,
+    batch_size=64,
     verbose=1,
 )
 
