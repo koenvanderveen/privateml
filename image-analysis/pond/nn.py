@@ -512,7 +512,7 @@ class Sequential(Model):
         sys.stdout.flush()
         progress = (batch_index / n_batches)
         n_eq = int(progress * 30)
-        n_dot = 60 - n_eq
+        n_dot = 30 - n_eq
         progress_bar = "=" * n_eq + ">" + n_dot * "."
 
         if val_loss is None:
