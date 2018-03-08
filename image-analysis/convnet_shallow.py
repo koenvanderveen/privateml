@@ -43,7 +43,8 @@ classifier.fit(
     epochs=5,
     batch_size=64,
     verbose=1,
-    learning_rate=0.01,
+    learning_rate=0.005,
+    eval_n_batches=3
 )
 
 exit()

@@ -512,7 +512,7 @@ class Sequential(Model):
         sys.stdout.flush()
         progress = (batch_index / n_batches)
         n_eq = int(progress * 30)
-        n_dot = 60 - n_eq
+        n_dot = 30 - n_eq
         progress_bar = "=" * n_eq + ">" + n_dot * "."
 
         if val_loss is None:
@@ -521,8 +521,10 @@ class Sequential(Model):
                                             train_loss, train_acc))
         else:
             message = "{}/{} [{}] - train_loss: {:.5f} - train_acc {:.5f} - val_loss {:.5f} - val_acc {:.5f}"
-            sys.stdout.write(message.format((batch_index+1) * batch_size, n_batches * batch_size, progress_bar, train_loss,
-                                            train_acc, val_loss, val_acc))
+            sys.stdout.write(message.format((batch_index+1) * batch_size, n_batches * batch_size, progress_bar,
+                                            train_loss, train_acc, val_loss, val_acc))
+            # print(message.format((batch_index + 1) * batch_size, n_batches * batch_size, progress_bar, train_loss,
+            #                      train_acc, val_loss, val_acc))
 
         sys.stdout.flush()
 
@@ -561,7 +563,7 @@ class Sequential(Model):
 
                 # print status
                 if verbose >= 1:
-                    if batch_index + 1 % eval_n_batches == 0:
+                    if batch_index != 0 and batch_index % eval_n_batches == 0:
                         # validation print
                         y_pred_val = self.predict(x_valid)
                         val_loss = np.sum(loss.evaluate(y_pred_val, y_valid.all_data()).unwrap())
