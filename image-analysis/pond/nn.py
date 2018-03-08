@@ -12,7 +12,7 @@ class Layer:
 
 
 class Dense(Layer):
-    
+
     def __init__(self, num_nodes, num_features, initial_scale=.01, l2reg_lambda=0.0):
         self.num_nodes = num_nodes
         self.num_features = num_features
@@ -20,11 +20,11 @@ class Dense(Layer):
         self.l2reg_lambda = l2reg_lambda
         self.weights = None
         self.bias = None
-        
+
     def initialize(self):
         self.weights = NativeTensor(np.random.randn(self.num_features, self.num_nodes) * self.initial_scale)
         self.bias = NativeTensor(np.zeros((1, self.num_nodes)))
-        
+
     def forward(self, x):
         y = x.dot(self.weights) + self.bias
         # cache result for backward pass
@@ -43,35 +43,35 @@ class Dense(Layer):
         # compute and return external gradient
         d_x = d_y.dot(self.weights.transpose())
         return d_x
-    
-    
+
+
 class SigmoidExact(Layer):
-    
+
     def __init__(self):
         self.cache = None
-    
+
     def initialize(self):
         pass
-    
-    def forward(self, x):            
+
+    def forward(self, x):
         y = (x.neg().exp() + 1).inv()
         self.cache = y
         return y
-    
+
     def backward(self, d_y, learning_rate):
         y = self.cache
         d_x = d_y * y * (y.neg() + 1)
         return d_x
-    
-    
+
+
 class Sigmoid(Layer):
-    
+
     def __init__(self):
         self.cache = None
-    
+
     def initialize(self):
         pass
-    
+
     def forward(self, x):
         w0 = 0.5
         w1 = 0.2159198015
@@ -79,38 +79,38 @@ class Sigmoid(Layer):
         w5 = 0.0001825597
         w7 = -0.0000018848
         w9 = 0.0000000072
-        
+
         x2 = x * x
         x3 = x2 * x
-        x5 = x2 * x3        
-        x7 = x2 * x5        
+        x5 = x2 * x3
+        x7 = x2 * x5
         x9 = x2 * x7
         y = x9*w9 + x7*w7 + x5*w5 + x3*w3 + x*w1 + w0
-        
+
         self.cache = y
         return y
-    
+
     def backward(self, d_y, learning_rate):
         y = self.cache
         d_x = d_y * y * (y.neg() + 1)
         return d_x
-    
+
 
 class Softmax(Layer):
-    
+
     def __init__(self):
         pass
-    
+
     def initialize(self):
         pass
-    
+
     def forward(self, x):
         # we add the - x.max() for numerical stability, i.e. to prevent overflow
         likelihoods = (x - x.max(axis=1, keepdims=True)).exp()
         probs = likelihoods.div(likelihoods.sum(axis=1, keepdims=True))
         self.cache = probs
         return probs
-    
+
     def backward(self, d_probs, learning_rate):
         # TODO does the split between Softmax and CrossEntropy make sense?
         probs = self.cache
@@ -187,15 +187,15 @@ class Dropout(Layer):
 class Flatten(Layer):
     def __init__(self):
         self.shape = None
-        
+
     def initialize(self):
         pass
-    
+
     def forward(self, x):
         self.shape = x.shape
         y = x.reshape(x.shape[0], -1)
         return y
-    
+
     def backward(self, d_y, learning_rate):
         return d_y.reshape(self.shape)
 
@@ -268,25 +268,25 @@ class Conv2D():
 
 
 class Conv2DNaive():
-        
+
     def __init__(self, fshape, strides=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)):
         """ 2 Dimensional convolutional layer NHWC
             fshape: tuple of rank 4
             strides: int with stride size
             filter init: lambda function with shape parameter
-            Example: Conv2D((4, 4, 1, 20), strides=2, filter_init=lambda shp: np.random.normal(scale=0.01, size=shp))       
+            Example: Conv2D((4, 4, 1, 20), strides=2, filter_init=lambda shp: np.random.normal(scale=0.01, size=shp))
         """
         self.fshape = fshape
         self.strides = strides
         self.filter_init = filter_init
         self.cache = None
         self.initializer = None
-        
+
     def initialize(self):
         self.filters = self.filter_init(self.fshape)
 
     def forward(self, x):
-        # TODO: padding 
+        # TODO: padding
         s = (x.shape[1] - self.fshape[0]) // self.strides + 1
         self.initializer = type(x)
         fmap = self.initializer(np.zeros((x.shape[0], s, s, self.fshape[-1])))
@@ -297,7 +297,7 @@ class Conv2DNaive():
                                     :, np.newaxis] * self.filters).sum(axis=(1, 2, 3))
         self.cache = x
         return fmap
-    
+
     def backward(self, d_y, learning_rate):
         x = self.cache
         # compute gradients for internal parameters and update
@@ -306,7 +306,7 @@ class Conv2DNaive():
         # compute and return external gradient
         d_x = self.backwarded_error(d_y)
         return d_x
-    
+
     def backwarded_error(self, layer_err):
         bfmap_shape = (layer_err.shape[1] - 1) * self.strides + self.fshape[0]
         backwarded_fmap = self.initializer(np.zeros((layer_err.shape[0], bfmap_shape, bfmap_shape, self.fshape[-2])))
@@ -411,34 +411,34 @@ class AveragePooling2D_NHWC():
         d_x = d_y_expanded * x / self.pool_area
         return d_x
 
-    
+
 class Reveal(Layer):
-    
+
     def __init__(self):
         pass
-    
+
     def initialize(self):
         pass
-    
+
     def forward(self, x):
         return x.reveal()
-    
+
     def backward(self, d_y, learning_rate):
         return d_y
-    
-    
+
+
 class Loss:
     pass
 
 
 class Diff(Loss):
-    
+
     def derive(self, y_pred, y_train):
         return y_pred - y_train
-    
+
 
 class CrossEntropy(Loss):
-    
+
     def evaluate(self, probs_pred, probs_correct):
         batch_size = probs_pred.shape[0]
         losses = (probs_correct * probs_pred.log()).neg().sum(axis=1)
@@ -462,43 +462,43 @@ class SoftmaxCrossEntropy(Loss):
 
 
 class DataLoader:
-    
+
     def __init__(self, data, wrapper=lambda x: x):
         self.data = data
         self.wrapper = wrapper
-        
+
     def batches(self, batch_size=None, shuffle_indices=None):
         if shuffle_indices is not None:
             self.data = self.data[shuffle_indices]
         if batch_size is None:
             batch_size = self.data.shape[0]
         return (
-            self.wrapper(self.data[i:i+batch_size]) 
-            for i in range(0, self.data.shape[0], batch_size) 
+            self.wrapper(self.data[i:i+batch_size])
+            for i in range(0, self.data.shape[0], batch_size)
         )
 
     def all_data(self):
         return self.wrapper(self.data)
 
-    
+
 class Model:
     pass
 
 
 class Sequential(Model):
-    
+
     def __init__(self, layers):
         self.layers = layers
-    
+
     def initialize(self):
         for layer in self.layers:
             layer.initialize()
-    
+
     def forward(self, x):
         for layer in self.layers:
             x = layer.forward(x)
         return x
-    
+
     def backward(self, d_y, learning_rate):
         max_dy = 1000.0
         for layer in reversed(self.layers):
@@ -511,7 +511,9 @@ class Sequential(Model):
         sys.stdout.write('\r')
         sys.stdout.flush()
         progress = (batch_index / n_batches)
-        progress_bar = "=" * int(progress * 30) + (progress < 1) * ">" + (int((1 - progress) * 30) - 1) * "."
+        n_eq = int(progress * 30)
+        n_dot = 60 - n_eq
+        progress_bar = "=" * n_eq + ">" + n_dot * "."
 
         if val_loss is None:
             message = "{}/{} [{}] - train_loss: {:.5f} - train_acc {:.5f}"
@@ -556,16 +558,17 @@ class Sequential(Model):
 
                 # print status
                 if verbose >= 1:
-                    if batch_index + 1 != n_batches:
-                        # normal print
-                        self.print_progress(batch_index, n_batches, batch_size, train_acc=acc, train_loss=train_loss)
-                    else:
+                    if batch_index % 10 == 0:
                         # validation print
                         y_pred_val = self.predict(x_valid)
                         val_loss = np.sum(loss.evaluate(y_pred_val, y_valid.all_data()).unwrap())
                         val_acc = np.mean(y_valid.all_data().unwrap().argmax(axis=1) == y_pred_val.unwrap().argmax(axis=1))
                         self.print_progress(batch_index, n_batches, batch_size, train_acc=acc, train_loss=train_loss,
                                             val_loss=val_loss, val_acc=val_acc)
+                    # elif batch_index + 1 != n_batches:
+                    else:
+                        # normal print
+                        self.print_progress(batch_index, n_batches, batch_size, train_acc=acc, train_loss=train_loss)
 
             # Newline after progressbar.
             print()
