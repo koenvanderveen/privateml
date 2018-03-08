@@ -521,8 +521,10 @@ class Sequential(Model):
                                             train_loss, train_acc))
         else:
             message = "{}/{} [{}] - train_loss: {:.5f} - train_acc {:.5f} - val_loss {:.5f} - val_acc {:.5f}"
-            sys.stdout.write(message.format((batch_index+1) * batch_size, n_batches * batch_size, progress_bar, train_loss,
-                                            train_acc, val_loss, val_acc))
+            sys.stdout.write(message.format((batch_index+1) * batch_size, n_batches * batch_size, progress_bar,
+                                            train_loss, train_acc, val_loss, val_acc))
+            # print(message.format((batch_index + 1) * batch_size, n_batches * batch_size, progress_bar, train_loss,
+            #                      train_acc, val_loss, val_acc))
 
         sys.stdout.flush()
 
@@ -536,8 +538,9 @@ class Sequential(Model):
             if not isinstance(x_valid, DataLoader): x_valid = DataLoader(x_valid)
             if not isinstance(y_train, DataLoader): y_valid = DataLoader(y_valid)
 
+        n_batches = math.ceil(len(x_train.data) / batch_size)
         if eval_n_batches is None:
-            eval_n_batches is n_batches
+            eval_n_batches = n_batches
 
         for epoch in range(epochs):
             if verbose >= 1:
@@ -548,7 +551,6 @@ class Sequential(Model):
             batches = zip(x_train.batches(batch_size, shuffle_indices=shuffle),
                           y_train.batches(batch_size, shuffle_indices=shuffle))
 
-            n_batches = math.ceil(len(x_train.data) / batch_size)
             for batch_index, (x_batch, y_batch) in enumerate(batches):
                 if verbose >= 2:
                     print(datetime.now(), "Batch %s" % batch_index)
@@ -561,7 +563,7 @@ class Sequential(Model):
 
                 # print status
                 if verbose >= 1:
-                    if batch_index + 1 % eval_n_batches == 0:
+                    if batch_index != 0 and batch_index % eval_n_batches == 0:
                         # validation print
                         y_pred_val = self.predict(x_valid)
                         val_loss = np.sum(loss.evaluate(y_pred_val, y_valid.all_data()).unwrap())
