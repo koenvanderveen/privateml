@@ -13,10 +13,11 @@ class Layer:
 
 class Dense(Layer):
     
-    def __init__(self, num_nodes, num_features, initial_scale=.01):
+    def __init__(self, num_nodes, num_features, initial_scale=.01, l2reg_lambda=0.0):
         self.num_nodes = num_nodes
         self.num_features = num_features
         self.initial_scale = initial_scale
+        self.l2reg_lambda = l2reg_lambda
         self.weights = None
         self.bias = None
         
@@ -30,11 +31,11 @@ class Dense(Layer):
         self.cache = x
         return y
 
-    def backward(self, d_y, learning_rate, l2reg_lambda=0.00):
+    def backward(self, d_y, learning_rate):
         x = self.cache
         # compute gradients for internal parameters and update
         d_weights = x.transpose().dot(d_y)
-        d_weights += self.weights * (l2reg_lambda / x.shape[0])
+        d_weights += self.weights * (self.l2reg_lambda / x.shape[0])
 
         d_bias = d_y.sum(axis=0)
         self.weights = (d_weights * learning_rate).neg() + self.weights
@@ -201,7 +202,7 @@ class Flatten(Layer):
 
 class Conv2D():
     def __init__(self, fshape, strides=1, padding=0, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp),
-                 channels_first=True):
+                 l2reg_lambda=0.0, channels_first=True):
         """ 2 Dimensional convolutional layer, expects NCHW data format
             fshape: tuple of rank 4
             strides: int with stride size
@@ -213,6 +214,7 @@ class Conv2D():
         self.strides = strides
         self.padding = padding
         self.filter_init = filter_init
+        self.l2reg_lambda = l2reg_lambda
         self.cache = None
         self.cached_input_shape = None
         self.initializer = None
@@ -253,6 +255,8 @@ class Conv2D():
         dout_reshaped = d_y.transpose(1, 2, 3, 0).reshape(n_filter, -1)
         dw = dout_reshaped.dot(X_col.transpose())
         dw = dw.reshape(self.filters.shape)
+        dw += self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
+
         self.filters = (dw * learning_rate).neg() + self.filters
 
         W_reshape = self.filters.reshape(n_filter, -1)
@@ -437,10 +441,10 @@ class CrossEntropy(Loss):
     
     def evaluate(self, probs_pred, probs_correct):
         batch_size = probs_pred.shape[0]
-        losses = (probs_correct * (probs_pred).log()).neg()
+        losses = (probs_correct * probs_pred.log()).neg().sum(axis=1)
         loss = losses.sum(axis=0).div(batch_size)
         return loss
-        
+
     def derive(self, y_pred, y_correct):
         return y_correct
 
@@ -494,7 +498,9 @@ class Sequential(Model):
         return x
     
     def backward(self, d_y, learning_rate):
+        max_dy = 1000.0
         for layer in reversed(self.layers):
+            # d_y = layer.backward(d_y, learning_rate).clip(-max_dy, max_dy)
             d_y = layer.backward(d_y, learning_rate)
 
     @staticmethod
@@ -510,7 +516,7 @@ class Sequential(Model):
             sys.stdout.write(message.format((batch_index+1) * batch_size, n_batches * batch_size, progress_bar,
                                             train_loss, train_acc))
         else:
-            message = "{}/{} [{}] - train_los: {:.5f} - train_acc {:.5f} - val_loss {:.5f} - val_acc {:.5f}"
+            message = "{}/{} [{}] - train_loss: {:.5f} - train_acc {:.5f} - val_loss {:.5f} - val_acc {:.5f}"
             sys.stdout.write(message.format((batch_index+1) * batch_size, n_batches * batch_size, progress_bar, train_loss,
                                             train_acc, val_loss, val_acc))
 
@@ -535,7 +541,7 @@ class Sequential(Model):
                     print(datetime.now(), "Batch %s" % batch_index)
 
                 y_pred = self.forward(x_batch)
-                train_loss = np.sum(loss.evaluate(y_pred, y_batch).unwrap())
+                train_loss = loss.evaluate(y_pred, y_batch).unwrap()[0]
                 acc = np.mean(y_batch.unwrap().argmax(axis=1) == y_pred.unwrap().argmax(axis=1))
                 d_y = loss.derive(y_pred, y_batch)
                 self.backward(d_y, learning_rate)

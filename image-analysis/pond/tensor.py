@@ -65,16 +65,10 @@ class NativeTensor:
         if isinstance(y, NativeTensor):
             np.add.at(self.values, indices, y.values)
         else:
-            raise TypeError("%s does not support %s" % (type(x), type(y)))
+            raise TypeError("%s does not support %s" % (type(self), type(y)))
 
     def sub(x, y):
         y = NativeTensor.wrap_if_needed(y)
-        try:
-            if isinstance(y, NativeTensor): return NativeTensor(x.values * y.values)
-        except FloatingPointError:
-            print(x.values)
-            print(y.values)
-            exit()
         if isinstance(y, NativeTensor): return NativeTensor(x.values - y.values)
         if isinstance(y, PublicEncodedTensor): return PublicEncodedTensor.from_values(x.values).sub(y)
         if isinstance(y, PrivateEncodedTensor): return PublicEncodedTensor.from_values(x.values).sub(y)
@@ -85,13 +79,7 @@ class NativeTensor:
 
     def mul(x, y):
         y = NativeTensor.wrap_if_needed(y)
-        try:
-            if isinstance(y, NativeTensor): return NativeTensor(x.values * y.values)
-        except FloatingPointError:
-            print(x.values)
-            print(y.values)
-            exit()
-
+        if isinstance(y, NativeTensor): return NativeTensor(x.values * y.values)
         if isinstance(y, PublicEncodedTensor): return PublicEncodedTensor.from_values(x.values).mul(y)
         if isinstance(y, PrivateEncodedTensor): return PublicEncodedTensor.from_values(x.values).mul(y)
         if isinstance(y, float): return NativeTensor(x.values * y)
@@ -150,6 +138,9 @@ class NativeTensor:
     def sum(x, axis=None, keepdims=False):
         return NativeTensor(x.values.sum(axis=axis, keepdims=keepdims))
 
+    def clip(x, min, max):
+        return NativeTensor.from_values(np.clip(x.values, min, max))
+
     def argmax(x, axis):
         return NativeTensor.from_values(x.values.argmax(axis=axis))
 
@@ -160,8 +151,8 @@ class NativeTensor:
         return NativeTensor(np.exp(x.values))
 
     def log(x):
-        # use this log to set log 0 -> 0
-        return NativeTensor(np.ma.log(x.values).filled(0))
+        # use this log to set log 0 -> -10^2
+        return NativeTensor(np.ma.log(x.values).filled(-1e2))
 
     def inv(x):
         return NativeTensor(1. / x.values)
