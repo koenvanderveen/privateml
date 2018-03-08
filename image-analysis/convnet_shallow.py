@@ -13,16 +13,21 @@ x_test = x_test[:, np.newaxis, :, :] / 255.0
 y_train = to_categorical(y_train, 10)
 y_test = to_categorical(y_test, 10)
 
+_ = np.seterr(over='raise')
+_ = np.seterr(under='warn')
+_ = np.seterr(invalid='raise')
+
 # NativeTensor.
 classifier = Sequential([
     Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp),
-           l2reg_lambda=5.0),
+           l2reg_lambda=10.0),
     ReluExact(),
-    AveragePooling2D(pool_size=(4, 4)),
+    Conv2D((3, 3, 32, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp),
+           l2reg_lambda=10.0),
+    ReluExact(),
+    AveragePooling2D(pool_size=(2, 2)),
     Flatten(),
-    Dense(100, 1568, l2reg_lambda=5.0),
-    ReluExact(),
-    Dense(10, 100, l2reg_lambda=5.0),
+    Dense(10, 1568*4, l2reg_lambda=10.0),
     Reveal(),
     Softmax()
 ])
@@ -35,10 +40,10 @@ classifier.fit(
     x_valid=DataLoader(x_test, wrapper=NativeTensor),
     y_valid=DataLoader(y_test, wrapper=NativeTensor),
     loss=CrossEntropy(),
-    epochs=10,
+    epochs=5,
     batch_size=64,
     verbose=1,
-	learning_rate=0.01
+    learning_rate=0.01,
 )
 
 exit()
