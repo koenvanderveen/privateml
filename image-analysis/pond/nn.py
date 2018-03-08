@@ -527,7 +527,7 @@ class Sequential(Model):
         sys.stdout.flush()
 
     def fit(self, x_train, y_train, x_valid=None, y_valid=None, loss=None, batch_size=32, epochs=1000,
-            learning_rate=.01, verbose=0):
+            learning_rate=.01, verbose=0, eval_n_batches=None):
 
         if not isinstance(x_train, DataLoader): x_train = DataLoader(x_train)
         if not isinstance(y_train, DataLoader): y_train = DataLoader(y_train)
@@ -535,6 +535,9 @@ class Sequential(Model):
         if x_valid is not None:
             if not isinstance(x_valid, DataLoader): x_valid = DataLoader(x_valid)
             if not isinstance(y_train, DataLoader): y_valid = DataLoader(y_valid)
+
+        if eval_n_batches is None:
+            eval_n_batches is n_batches
 
         for epoch in range(epochs):
             if verbose >= 1:
@@ -558,14 +561,13 @@ class Sequential(Model):
 
                 # print status
                 if verbose >= 1:
-                    if batch_index % 10 == 0:
+                    if batch_index + 1 % eval_n_batches == 0:
                         # validation print
                         y_pred_val = self.predict(x_valid)
                         val_loss = np.sum(loss.evaluate(y_pred_val, y_valid.all_data()).unwrap())
                         val_acc = np.mean(y_valid.all_data().unwrap().argmax(axis=1) == y_pred_val.unwrap().argmax(axis=1))
                         self.print_progress(batch_index, n_batches, batch_size, train_acc=acc, train_loss=train_loss,
                                             val_loss=val_loss, val_acc=val_acc)
-                    # elif batch_index + 1 != n_batches:
                     else:
                         # normal print
                         self.print_progress(batch_index, n_batches, batch_size, train_acc=acc, train_loss=train_loss)
