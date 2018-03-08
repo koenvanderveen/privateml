@@ -18,16 +18,16 @@ y_test = to_categorical(y_test, 10)
 
 
 convnet_deep = Sequential([
-    Conv2D((4, 4, 1, 20), strides=2, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp),
-           l2reg_lambda=1.0),
+    Conv2D((4, 4, 1, 20), strides=2, padding=1, filter_init=lambda shp: np.random.normal(scale=0.02, size=shp),
+           l2reg_lambda=0.15),
     ReluExact(),
     AveragePooling2D(pool_size=(2,2)),
-    Conv2D((3, 3, 20, 20), strides=2, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp),
-           l2reg_lambda=1.0),
+    Conv2D((3, 3, 20, 20), strides=2, padding=1, filter_init=lambda shp: np.random.normal(scale=0.02, size=shp),
+           l2reg_lambda=0.15),
     ReluExact(),
     AveragePooling2D(pool_size=(2,2)),
     Flatten(),
-    Dense(10, 80, l2reg_lambda=1.0),
+    Dense(10, 80, l2reg_lambda=0.15),
     Reveal(),
     Softmax()
 ])
@@ -40,7 +40,7 @@ convnet_deep.fit(
     x_valid=DataLoader(x_test, wrapper=NativeTensor),
     y_valid=DataLoader(y_test, wrapper=NativeTensor),
     loss=CrossEntropy(),
-    epochs=5,
-    batch_size=32,
+    epochs=10,
+    batch_size=64,
     verbose=1,
 )

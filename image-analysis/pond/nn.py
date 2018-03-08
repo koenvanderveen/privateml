@@ -34,8 +34,7 @@ class Dense(Layer):
     def backward(self, d_y, learning_rate):
         x = self.cache
         # compute gradients for internal parameters and update
-        d_weights = x.transpose().dot(d_y)
-        d_weights += self.weights * (self.l2reg_lambda / x.shape[0])
+        d_weights = x.transpose().dot(d_y) + self.weights * (self.l2reg_lambda / x.shape[0])
 
         d_bias = d_y.sum(axis=0)
         self.weights = (d_weights * learning_rate).neg() + self.weights
@@ -243,6 +242,7 @@ class Conv2D():
 
         out = out.reshape(n_filters, h_out, w_out, n_x)
         out = out.transpose(3, 0, 1, 2)
+        print(out.shape)
         self.cache = X_col
         self.cached_input_shape = x.shape
 
@@ -533,7 +533,7 @@ class Sequential(Model):
             if not isinstance(y_train, DataLoader): y_valid = DataLoader(y_valid)
 
         for epoch in range(epochs):
-            if verbose >= 1: print(datetime.now(), "Epoch %s" % epoch )
+            if verbose >= 1: print(datetime.now(), "Epoch {}".format(epoch + 1) )
             batches = zip(x_train.batches(batch_size), y_train.batches(batch_size))
             n_batches = math.ceil(len(x_train.data) / batch_size)
             for batch_index, (x_batch, y_batch) in enumerate(batches):
