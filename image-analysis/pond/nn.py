@@ -563,7 +563,7 @@ class Sequential(Model):
 
                 # print status
                 if verbose >= 1:
-                    if batch_index != 0 and batch_index % eval_n_batches == 0:
+                    if batch_index != 0 and (batch_index + 1) % eval_n_batches == 0:
                         # validation print
                         y_pred_val = self.predict(x_valid)
                         val_loss = np.sum(loss.evaluate(y_pred_val, y_valid.all_data()).unwrap())

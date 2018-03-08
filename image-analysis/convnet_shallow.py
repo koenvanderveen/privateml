@@ -19,19 +19,22 @@ _ = np.seterr(invalid='raise')
 
 # NativeTensor.
 classifier = Sequential([
-    Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp),
+    Conv2D((3, 3, 1, 16), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp),
            l2reg_lambda=10.0),
     ReluExact(),
-    Conv2D((3, 3, 32, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp),
-           l2reg_lambda=10.0),
-    ReluExact(),
+    # Conv2D((3, 3, 32, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp),
+    #        l2reg_lambda=10.0),
+    # ReluExact(),
     AveragePooling2D(pool_size=(2, 2)),
     Flatten(),
-    Dense(10, 1568*4, l2reg_lambda=10.0),
+    Dense(10, 3136, l2reg_lambda=10.0),
     Reveal(),
     Softmax()
 ])
 
+
+x_train = x_train[:1000]
+y_train = y_train[:1000]
 
 classifier.initialize()
 classifier.fit(
@@ -44,7 +47,7 @@ classifier.fit(
     batch_size=64,
     verbose=1,
     learning_rate=0.005,
-    eval_n_batches=100,
+    eval_n_batches=2
 )
 
 exit()
