@@ -467,7 +467,9 @@ class DataLoader:
         self.data = data
         self.wrapper = wrapper
         
-    def batches(self, batch_size=None):
+    def batches(self, batch_size=None, shuffle_indices=None):
+        if shuffle_indices is not None:
+            self.data = self.data[shuffle_indices]
         if batch_size is None:
             batch_size = self.data.shape[0]
         return (
@@ -533,8 +535,14 @@ class Sequential(Model):
             if not isinstance(y_train, DataLoader): y_valid = DataLoader(y_valid)
 
         for epoch in range(epochs):
-            if verbose >= 1: print(datetime.now(), "Epoch %s" % epoch )
-            batches = zip(x_train.batches(batch_size), y_train.batches(batch_size))
+            if verbose >= 1:
+                print(datetime.now(), "Epoch %s" % epoch)
+
+            # Create batches on shuffled data
+            shuffle = np.random.permutation(x_train.data.shape[0])
+            batches = zip(x_train.batches(batch_size, shuffle_indices=shuffle),
+                          y_train.batches(batch_size, shuffle_indices=shuffle))
+
             n_batches = math.ceil(len(x_train.data) / batch_size)
             for batch_index, (x_batch, y_batch) in enumerate(batches):
                 if verbose >= 2:
