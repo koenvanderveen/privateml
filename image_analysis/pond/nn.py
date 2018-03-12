@@ -123,7 +123,6 @@ class SoftmaxStable(Layer):
         return probs
 
     def backward(self, d_probs, learning_rate):
-        # TODO does the split between Softmax and CrossEntropy make sense?
         probs = self.cache
         batch_size = probs.shape[0]
         d_scores = probs - d_probs
@@ -582,7 +581,7 @@ class Sequential(Model):
             else:
                 d_y = d_y_unscaled
             # d_y_scaled = d_y
-            d_y_unscaled = layer.backward(d_y, learning_rate).clip(-max_dy, max_dy)
+            d_y_unscaled = layer.backward(d_y, learning_rate)
 
     @staticmethod
     def print_progress(batch_index, n_batches, batch_size, train_loss=None, train_acc=None,
