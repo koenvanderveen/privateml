@@ -178,10 +178,10 @@ class ReluExact(Layer):
 
 class Relu(Layer):
 
-    def __init__(self, order=9, domain=(-100, 100)):
+    def __init__(self, order=7, domain=(-1, 1), n=1000):
         self.cache = None
         self.n_coeff = order + 1
-        self.coeff = NativeTensor(self.compute_coefficients_relu(order, domain))
+        self.coeff = NativeTensor(self.compute_coefficients_relu(order, domain, n))
         self.coeff_der = (self.coeff * NativeTensor(list(range(self.n_coeff))[::-1]))[:-1]
 
     def initialize(self):
@@ -209,10 +209,10 @@ class Relu(Layer):
         return y
 
     @staticmethod
-    def compute_coefficients_relu(order, domain):
+    def compute_coefficients_relu(order, domain, n):
         assert domain[0] < 0 < domain[1]
-        x = list(range(domain[0], domain[1]))
-        y = [0] * abs(domain[0]) + list(range(0, domain[1]))
+        x = np.linspace(domain[0], domain[1], n)
+        y = (x > 0) * x
         return np.polyfit(x, y, order)
 
 
