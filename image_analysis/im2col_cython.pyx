@@ -2,8 +2,8 @@ import numpy as np
 cimport numpy as np
 cimport cython
 
-# DTYPE = np.float64
-# ctypedef np.float64_t DTYPE_t
+DTYPE = np.float64
+ctypedef np.float64_t DTYPE_t
 
 ctypedef fused DTYPE_t:
     np.float32_t
@@ -15,7 +15,7 @@ def im2col_cython(np.ndarray[DTYPE_t, ndim=4] x, int field_height,
     cdef int C = x.shape[1]
     cdef int H = x.shape[2]
     cdef int W = x.shape[3]
-    
+
     cdef int HH = (H + 2 * padding - field_height) / stride + 1
     cdef int WW = (W + 2 * padding - field_width) / stride + 1
 
@@ -64,7 +64,7 @@ def col2im_cython(np.ndarray[DTYPE_t, ndim=2] cols, int N, int C, int H, int W,
 
     # Moving the inner loop to a C-function with no bounds checking improves
     # performance quite a bit for col2im.
-    col2im_cython_inner(cols, x_padded, N, C, H, W, HH, WW, 
+    col2im_cython_inner(cols, x_padded, N, C, H, W, HH, WW,
                         field_height, field_width, padding, stride)
     if padding > 0:
         return x_padded[:, :, padding:-padding, padding:-padding]
@@ -104,7 +104,7 @@ cdef col2im_6d_cython_inner(np.ndarray[DTYPE_t, ndim=6] cols,
                     for h in range(out_h):
                         for w in range(out_w):
                             x_padded[n, c, stride * h + hh, stride * w + ww] += cols[c, hh, ww, n, h, w]
-    
+
 
 def col2im_6d_cython(np.ndarray[DTYPE_t, ndim=6] cols, int N, int C, int H, int W,
         int HH, int WW, int pad, int stride):
@@ -118,4 +118,4 @@ def col2im_6d_cython(np.ndarray[DTYPE_t, ndim=6] cols, int N, int C, int H, int 
 
     if pad > 0:
         return x_padded[:, :, pad:-pad, pad:-pad]
-    return x_padded 
+    return x_padded
