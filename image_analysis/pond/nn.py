@@ -10,8 +10,8 @@ try:
     from im2col.im2col_cython import im2col_cython, col2im_cython
     cython = True
 except ImportError:
-    print('run the following from the image_analysis directory to use cython:')
-    print('python setup.py build_ext --inplace')
+    print('\nRun the following from the image_analysis/im2col directory to use cython:')
+    print('python setup.py build_ext --inplace\n')
     cython = False
 
 
