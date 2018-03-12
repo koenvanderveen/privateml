@@ -1,5 +1,8 @@
-import keras
-import numpy as np
+import warnings
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore",category=FutureWarning)
+    import numpy as np
+    import keras
 from pond.tensor import NativeTensor, PrivateEncodedTensor, PublicEncodedTensor
 from pond.nn import Dense, Sigmoid, SigmoidExact, ReluExact, Reveal, Diff, Softmax, CrossEntropy, SoftmaxStable, CrossEntropyStable, Sequential, DataLoader, Conv2D, AveragePooling2D, Flatten
 from keras.utils import to_categorical
