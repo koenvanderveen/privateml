@@ -4,7 +4,7 @@ from Cython.Build import cythonize
 import numpy
 
 extensions = [
-      Extension('image_analysis.im2col.im2col_cython', ['im2col_cython.pyx'],
+      Extension('im2col.im2col_cython', ['im2col_cython.pyx'],
                     include_dirs = [numpy.get_include()]),
 ]
 
