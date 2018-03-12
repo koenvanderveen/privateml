@@ -5,6 +5,7 @@ from functools import reduce
 from pond.tensor import NativeTensor, PrivateEncodedTensor, PublicEncodedTensor
 from im2col import im2col_indices, col2im_indices
 import math
+import time
 
 # try:
 # from im2col_cython import im2col_cython
@@ -112,7 +113,11 @@ class SoftmaxStable(Layer):
 
     def forward(self, x):
         # we add the - x.max() for numerical stability, i.e. to prevent overflow
-        likelihoods = (x - x.max(axis=1, keepdims=True)).exp()
+        try:
+            likelihoods = (x - x.max(axis=1, keepdims=True)).clip(-10.0, np.inf).exp()
+        except FloatingPointError:
+            print((x - x.max(axis=1, keepdims=True)))
+            exit()
         probs = likelihoods.div(likelihoods.sum(axis=1, keepdims=True))
         self.cache = probs
         return probs
@@ -123,6 +128,7 @@ class SoftmaxStable(Layer):
         batch_size = probs.shape[0]
         d_scores = probs - d_probs
         d_scores = d_scores.div(batch_size)
+        # print(d_scores)
         # print(d_scores)
         return d_scores
 
@@ -300,6 +306,7 @@ class Conv2D():
 
     def backward(self, d_y, learning_rate):
         # cache
+        start = time.time()
         X_col = self.cache
         h_filter, w_filter, d_filter, n_filter = self.filters.shape
 
@@ -309,16 +316,22 @@ class Conv2D():
         dw = dw.reshape(self.filters.shape)
         dw += self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
         self.filters = (dw * learning_rate).neg() + self.filters
+        print("update weights: {}".format(time.time()-start))
 
         # biases
         d_bias = d_y.sum(axis=0)
         self.bias = (d_bias * learning_rate).neg() + self.bias
 
+        start = time.time()
         # delta
         W_reshape = self.filters.reshape(n_filter, -1)
         dx_col = W_reshape.transpose().dot(dout_reshaped)
+        print("compute delta: {}".format(time.time()-start))
+
+        start = time.time()
         dx = col2im_indices(dx_col, self.cached_input_shape, self.initializer,field_height=h_filter,
                             field_width=w_filter, padding=self.padding, stride=self.strides)
+        print("col2im delta: {}".format(time.time()-start))
 
         return dx
 
@@ -551,7 +564,7 @@ class Model:
 
 class Sequential(Model):
 
-    def __init__(self, layers):
+    def __init__(self, layers=[]):
         self.layers = layers
 
     def initialize(self):
@@ -564,10 +577,18 @@ class Sequential(Model):
         return x
 
     def backward(self, d_y, learning_rate):
-        max_dy = 1000.0
+        max_dy = 1.0
+
+        d_y_unscaled = d_y
         for layer in reversed(self.layers):
-            # d_y = layer.backward(d_y, learning_rate).clip(-max_dy, max_dy)
-            d_y = layer.backward(d_y, learning_rate)
+            max_norm = max(d_y_unscaled.max().unwrap(), - d_y_unscaled.min().unwrap())
+            if max_norm > 1.0:
+                print("\n max dy > 0")
+                d_y = d_y_unscaled / max_norm
+            else:
+                d_y = d_y_unscaled
+            # d_y_scaled = d_y
+            d_y_unscaled = layer.backward(d_y, learning_rate).clip(-max_dy, max_dy)
 
     @staticmethod
     def print_progress(batch_index, n_batches, batch_size, train_loss=None, train_acc=None,

@@ -144,8 +144,11 @@ class NativeTensor:
     def argmax(x, axis):
         return NativeTensor.from_values(x.values.argmax(axis=axis))
 
-    def max(x, axis, keepdims=False):
+    def max(x, axis=None, keepdims=False):
         return NativeTensor.from_values(x.values.max(axis=axis, keepdims=keepdims))
+
+    def min(x, axis=None, keepdims=False):
+        return NativeTensor.from_values(x.values.min(axis=axis, keepdims=keepdims))
 
     def exp(x):
         return NativeTensor(np.exp(x.values))

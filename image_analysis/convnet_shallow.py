@@ -34,9 +34,6 @@ classifier = Sequential([
 ])
 
 
-x_train = x_train[:1000]
-y_train = y_train[:1000]
-
 classifier.initialize()
 classifier.fit(
     x_train=DataLoader(x_train, wrapper=NativeTensor),
@@ -47,8 +44,8 @@ classifier.fit(
     epochs=5,
     batch_size=64,
     verbose=1,
-    learning_rate=0.005,
-    eval_n_batches=2
+    learning_rate=0.05,
+    eval_n_batches=100
 )
 
 exit()
