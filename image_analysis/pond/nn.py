@@ -295,10 +295,8 @@ class Conv2D():
             X_col = im2col_indices(x, field_height=h_filter, field_width=w_filter, padding=self.padding,
                                stride=self.strides)
 
-        W_col = self.filters.reshape(n_filters, -1)
-        # multiplication
+        W_col = self.filters.transpose(3,2,0,1).reshape(n_filters, -1)
         out = W_col.dot(X_col)
-        out = out.reshape(self.fshape[3], h_out, w_out, n_x)
 
         out = out.reshape(n_filters, h_out, w_out, n_x)
         out = out.transpose(3, 0, 1, 2)
@@ -579,17 +577,15 @@ class Sequential(Model):
         return x
 
     def backward(self, d_y, learning_rate):
-        max_dy = 0.1
+        max_dy = 1.0
         d_y_unscaled = d_y
         for layer in reversed(self.layers):
             # d_y_scaled = d_y
             d_y_unscaled = layer.backward(d_y, learning_rate)
 
             max_norm = max(d_y_unscaled.max().unwrap(), - d_y_unscaled.min().unwrap())
-            if max_norm > 1.0:
-                print(max_norm)
-                print(layer.__class__.__name__)
-                print(layer.cache)
+            if max_norm > max_dy:
+                print("\n max dy > 0")
                 d_y = d_y_unscaled * (max_dy / max_norm)
             else:
                 d_y = d_y_unscaled
