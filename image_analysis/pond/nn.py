@@ -304,11 +304,11 @@ class Conv2D():
         dw = dout_reshaped.dot(X_col.transpose())
         dw = dw.reshape(self.filters.shape)
         dw += self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
-        self.filters = ((dw * learning_rate).neg() + self.filters).clip(-1,1)
+        self.filters = ((dw * learning_rate).neg() + self.filters)
 
         # biases
         d_bias = d_y.sum(axis=0)
-        self.bias = ((d_bias * learning_rate).neg() + self.bias).clip(-1,1)
+        self.bias = ((d_bias * learning_rate).neg() + self.bias)
 
         # delta
         W_reshape = self.filters.reshape(n_filter, -1)
