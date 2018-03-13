@@ -192,9 +192,9 @@ class Relu(Layer):
         n_dims = len(x.shape)
         x.expand_dims(axis=n_dims).repeat(self.n_coeff, axis=n_dims)
 
-        for i in range(self.n_coeff)[::-1]:
-            # x[:, :, :, :, i] = x[:, :, :, :, i] ** i
-            x[:, :, :, :, i] **= i
+        x[:, :, :, :, self.n_coeff-1] = NativeTensor(1)
+        for i in range(self.n_coeff - 2)[::-1]:
+            x[:, :, :, :, i] = x[:, :, :, :, i] * x[:, :, :, :, i+1]
 
         y = x.dot(self.coeff)
         self.cache = x[:, :, :, :, 1:]

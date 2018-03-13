@@ -26,7 +26,7 @@ l2 = 0
 convnet_deep = Sequential([
     Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.uniform(low=-0.14, high=0.14, size=shp),
            l2reg_lambda=l2),
-    Relu(),
+    Relu(order=9),
     Conv2D((3, 3, 32, 32), strides=1, padding=1, filter_init=lambda shp: np.random.uniform(low=-0.1, high=0.1, size=shp),
            l2reg_lambda=l2),
     ReluExact(),
