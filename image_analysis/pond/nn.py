@@ -305,11 +305,11 @@ class Conv2D():
         dw = dout_reshaped.dot(X_col.transpose())
         dw = dw.reshape(self.filters.shape)
         dw += self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
-        self.filters = (dw * learning_rate).neg() + self.filters
+        self.filters = ((dw * learning_rate).neg() + self.filters).clip(-1,1)
 
         # biases
         d_bias = d_y.sum(axis=0)
-        self.bias = (d_bias * learning_rate).neg() + self.bias
+        self.bias = ((d_bias * learning_rate).neg() + self.bias).clip(-1,1)
 
         # delta
         W_reshape = self.filters.reshape(n_filter, -1)
@@ -565,14 +565,15 @@ class Sequential(Model):
         max_dy = 1.0
         d_y_unscaled = d_y
         for layer in reversed(self.layers):
+            # d_y_scaled = d_y
+            d_y_unscaled = layer.backward(d_y, learning_rate)
+
             max_norm = max(d_y_unscaled.max().unwrap(), - d_y_unscaled.min().unwrap())
             if max_norm > max_dy:
                 print("\n max dy > 0")
                 d_y = d_y_unscaled * (max_dy / max_norm)
             else:
                 d_y = d_y_unscaled
-            # d_y_scaled = d_y
-            d_y_unscaled = layer.backward(d_y, learning_rate)
 
     @staticmethod
     def print_progress(batch_index, n_batches, batch_size, epoch_start, train_loss=None, train_acc=None,
@@ -581,7 +582,7 @@ class Sequential(Model):
         sys.stdout.flush()
         progress = (batch_index / n_batches)
 
-        eta = timedelta(seconds=round((time.time() - epoch_start) / progress, 0)) if progress > 0 else " "
+        eta = timedelta(seconds=round((1.-progress) * (time.time() - epoch_start) / progress, 0)) if progress > 0 else " "
         n_eq = int(progress * 30)
         n_dot = 30 - n_eq
         progress_bar = "=" * n_eq + ">" + n_dot * "."
