@@ -284,8 +284,7 @@ class Conv2D():
         # x to col
         X_col = x.im2col(h_filter, w_filter, self.padding, self.strides)
 
-
-        W_col = self.filters.transpose(3,2,0,1).reshape(n_filters, -1)
+        W_col = self.filters.transpose(3, 2, 0, 1).reshape(n_filters, -1)
         out = W_col.dot(X_col)
 
         out = out.reshape(n_filters, h_out, w_out, n_x)
@@ -317,7 +316,6 @@ class Conv2D():
 
         dx = dx_col.col2im(imshape=self.cached_input_shape, field_height=h_filter, field_width=w_filter,
                            padding=self.padding, stride=self.strides)
-
         return dx
 
 
