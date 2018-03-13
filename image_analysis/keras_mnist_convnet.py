@@ -58,8 +58,6 @@ model.compile(loss=keras.losses.categorical_crossentropy,
               optimizer=keras.optimizers.SGD(),
               metrics=['accuracy'])
 
-print(model.get_weights()[2].max())
-exit()
 
 model.fit(x_train, y_train,
           batch_size=batch_size,

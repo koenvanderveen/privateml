@@ -1,6 +1,6 @@
 import numpy as np
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import reduce
 from pond.tensor import NativeTensor
 from im2col.im2col import im2col_indices, col2im_indices
@@ -585,7 +585,7 @@ class Sequential(Model):
         for layer in reversed(self.layers):
             max_norm = max(d_y_unscaled.max().unwrap(), - d_y_unscaled.min().unwrap())
             if max_norm > 1.0:
-                # print("\n max dy > 0")
+                print("\n max dy > 0")
                 d_y = d_y_unscaled / max_norm
             else:
                 d_y = d_y_unscaled
@@ -593,23 +593,25 @@ class Sequential(Model):
             d_y_unscaled = layer.backward(d_y, learning_rate)
 
     @staticmethod
-    def print_progress(batch_index, n_batches, batch_size, train_loss=None, train_acc=None,
+    def print_progress(batch_index, n_batches, batch_size, epoch_start, train_loss=None, train_acc=None,
                        val_loss = None, val_acc=None):
         sys.stdout.write('\r')
         sys.stdout.flush()
         progress = (batch_index / n_batches)
+
+        eta = timedelta(seconds=round((time.time() - epoch_start) / progress, 0)) if progress > 0 else " "
         n_eq = int(progress * 30)
         n_dot = 30 - n_eq
         progress_bar = "=" * n_eq + ">" + n_dot * "."
 
         if val_loss is None:
-            message = "{}/{} [{}] - train_loss: {:.5f} - train_acc {:.5f}"
+            message = "{}/{} [{}] - ETA: {} - train_loss: {:.5f} - train_acc {:.5f}"
             sys.stdout.write(message.format((batch_index+1) * batch_size, n_batches * batch_size, progress_bar,
-                                            train_loss, train_acc))
+                                            eta, train_loss, train_acc))
         else:
-            message = "{}/{} [{}] - train_loss: {:.5f} - train_acc {:.5f} - val_loss {:.5f} - val_acc {:.5f}"
+            message = "{}/{} [{}] - ETA: {} - train_loss: {:.5f} - train_acc {:.5f} - val_loss {:.5f} - val_acc {:.5f}"
             sys.stdout.write(message.format((batch_index+1) * batch_size, n_batches * batch_size, progress_bar,
-                                            train_loss, train_acc, val_loss, val_acc))
+                                            eta, train_loss, train_acc, val_loss, val_acc))
             # print(message.format((batch_index + 1) * batch_size, n_batches * batch_size, progress_bar, train_loss,
             #                      train_acc, val_loss, val_acc))
 
@@ -630,6 +632,7 @@ class Sequential(Model):
             eval_n_batches = n_batches
 
         for epoch in range(epochs):
+            epoch_start = time.time()
             if verbose >= 1:
                 print(datetime.now(), "Epoch {}/{}".format(epoch + 1, epochs))
 
@@ -655,11 +658,11 @@ class Sequential(Model):
                         y_pred_val = self.predict(x_valid)
                         val_loss = np.sum(loss.evaluate(y_pred_val, y_valid.all_data()).unwrap())
                         val_acc = np.mean(y_valid.all_data().unwrap().argmax(axis=1) == y_pred_val.unwrap().argmax(axis=1))
-                        self.print_progress(batch_index, n_batches, batch_size, train_acc=acc, train_loss=train_loss,
+                        self.print_progress(batch_index, n_batches, batch_size, epoch_start, train_acc=acc, train_loss=train_loss,
                                             val_loss=val_loss, val_acc=val_acc)
                     else:
                         # normal print
-                        self.print_progress(batch_index, n_batches, batch_size, train_acc=acc, train_loss=train_loss)
+                        self.print_progress(batch_index, n_batches, batch_size, epoch_start, train_acc=acc, train_loss=train_loss)
 
             # Newline after progressbar.
             print()
