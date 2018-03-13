@@ -6,7 +6,7 @@ with warnings.catch_warnings():
 from pond.tensor import NativeTensor, PrivateEncodedTensor, PublicEncodedTensor
 from pond.nn import Dense, Sigmoid, SigmoidExact, ReluExact, Relu, Reveal, Diff, Softmax, CrossEntropy, SoftmaxStable, CrossEntropyStable, Sequential, DataLoader, Conv2D, AveragePooling2D, Flatten
 from keras.utils import to_categorical
-np.random.seed(42)
+np.random.seed(40)
 
 _ = np.seterr(over='raise')
 _ = np.seterr(under='raise')
