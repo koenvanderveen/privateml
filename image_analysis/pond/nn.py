@@ -3,17 +3,10 @@ import sys
 from datetime import datetime, timedelta
 from functools import reduce
 from pond.tensor import NativeTensor
-from im2col.im2col import im2col_indices, col2im_indices
+# from im2col.im2col import im2col_indices, col2im_indices
 import math
 import time
 
-try:
-    from im2col.im2col_cython import im2col_cython, col2im_cython
-    cython = True
-except ImportError:
-    print('\nRun the following from the image_analysis/im2col directory to use cython:')
-    print('python setup.py build_ext --inplace\n')
-    cython = False
 
 
 class Layer:
@@ -289,11 +282,8 @@ class Conv2D():
             self.bias = NativeTensor(np.zeros((n_filters, h_out, w_out)))
 
         # x to col
-        if cython:
-            X_col = im2col_cython(x.values, h_filter, w_filter, self.padding, self.strides)
-        else:
-            X_col = im2col_indices(x, field_height=h_filter, field_width=w_filter, padding=self.padding,
-                               stride=self.strides)
+        X_col = x.im2col(h_filter, w_filter, self.padding, self.strides)
+
 
         W_col = self.filters.transpose(3,2,0,1).reshape(n_filters, -1)
         out = W_col.dot(X_col)
@@ -325,13 +315,8 @@ class Conv2D():
         W_reshape = self.filters.reshape(n_filter, -1)
         dx_col = W_reshape.transpose().dot(dout_reshaped)
 
-        if cython:
-            dx = NativeTensor(col2im_cython(dx_col.values, self.cached_input_shape[0], self.cached_input_shape[1],
-                           self.cached_input_shape[2], self.cached_input_shape[3], h_filter, w_filter, self.padding,
-                           self.strides))
-        else:
-            dx = col2im_indices(dx_col, self.cached_input_shape, self.initializer,field_height=h_filter,
-                            field_width=w_filter, padding=self.padding, stride=self.strides)
+        dx = dx_col.col2im(imshape=self.cached_input_shape, field_height=h_filter, field_width=w_filter,
+                           padding=self.padding, stride=self.strides)
 
         return dx
 

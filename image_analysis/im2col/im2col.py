@@ -26,7 +26,7 @@ def im2col_indices(x, field_height, field_width, padding=1, stride=1):
     # Zero-pad the input
     p = padding
     if padding > 0:
-        x_padded = x.pad(((0, 0), (0, 0), (p, p), (p, p)), mode='constant')
+        x_padded = np.pad(x, ((0, 0), (0, 0), (p, p), (p, p)), mode='constant')
     else:
         x_padded = x
     k, i, j = get_im2col_indices(x.shape, field_height, field_width, padding,
@@ -37,17 +37,17 @@ def im2col_indices(x, field_height, field_width, padding=1, stride=1):
     return cols
 
 
-def col2im_indices(cols, x_shape, x_type, field_height=3, field_width=3, padding=1,
+def col2im_indices(cols, x_shape, field_height=3, field_width=3, padding=1,
                    stride=1):
     """ An implementation of col2im based on fancy indexing and np.add.at """
     N, C, H, W = x_shape
     H_padded, W_padded = H + 2 * padding, W + 2 * padding
-    x_padded = x_type(np.zeros((N, C, H_padded, W_padded)))
+    x_padded = np.zeros((N, C, H_padded, W_padded))
     k, i, j = get_im2col_indices(x_shape, field_height, field_width, padding,
                                  stride)
     cols_reshaped = cols.reshape(C * field_height * field_width, -1, N)
     cols_reshaped = cols_reshaped.transpose(2, 0, 1)
-    x_padded.add_at((slice(None), k, i, j), cols_reshaped)
+    np.add.at(x_padded, (slice(None), k, i, j), cols_reshaped)
     if padding == 0:
         return x_padded
     return x_padded[:, :, padding:-padding, padding:-padding]

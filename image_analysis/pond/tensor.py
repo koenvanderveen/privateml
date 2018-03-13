@@ -1,6 +1,15 @@
 import random
 import numpy as np
 from math import log
+from im2col.im2col import im2col_indices, col2im_indices
+
+try:
+    from im2col.im2col_cython import im2col_cython, col2im_cython
+    use_cython = True
+except ImportError:
+    print('\nRun the following from the image_analysis/im2col directory to use cython:')
+    print('python setup.py build_ext --inplace\n')
+    use_cython = False
 
 
 class NativeTensor:
@@ -177,6 +186,21 @@ class NativeTensor:
     def expand_dims(self, axis=0):
         self.values = np.expand_dims(self.values, axis=axis)
         return self
+
+    def im2col(x, h_filter, w_filter, padding, strides):
+        if use_cython:
+            return NativeTensor(im2col_cython(x.values, h_filter, w_filter, padding, strides))
+        else:
+            return NativeTensor(im2col_indices(x, field_height=h_filter, field_width=w_filter, padding=padding,
+                                               stride=strides))
+
+    def col2im(x, imshape, field_height, field_width, padding, stride):
+        if use_cython:
+            dx = NativeTensor(col2im_cython(x.values, imshape[0], imshape[1], imshape[2], imshape[3],
+                                            field_height, field_width, padding, stride))
+        else:
+            dx = NativeTensor(col2im_indices(x.values, imshape, field_height, field_width, padding, stride))
+
 
 
 DTYPE = 'object'
