@@ -191,7 +191,7 @@ class NativeTensor:
         if use_cython:
             return NativeTensor(im2col_cython(x.values, h_filter, w_filter, padding, strides))
         else:
-            return NativeTensor(im2col_indices(x, field_height=h_filter, field_width=w_filter, padding=padding,
+            return NativeTensor(im2col_indices(x.values, field_height=h_filter, field_width=w_filter, padding=padding,
                                                stride=strides))
 
     def col2im(x, imshape, field_height, field_width, padding, stride):
@@ -400,6 +400,20 @@ class PublicEncodedTensor:
 
     def pad(self, pad_width, mode='constant'):
         return PublicEncodedTensor.from_elements(np.pad(self.elements, pad_width=pad_width, mode=mode))
+
+    def im2col(x, h_filter, w_filter, padding, strides):
+        if use_cython:
+            return NativeTensor(im2col_cython(x.values, h_filter, w_filter, padding, strides))
+        else:
+            return NativeTensor(im2col_indices(x, field_height=h_filter, field_width=w_filter, padding=padding,
+                                               stride=strides))
+
+    def col2im(x, imshape, field_height, field_width, padding, stride):
+        if use_cython:
+            return NativeTensor(col2im_cython(x.values, imshape[0], imshape[1], imshape[2], imshape[3],
+                                              field_height, field_width, padding, stride))
+        else:
+            return NativeTensor(col2im_indices(x.values, imshape, field_height, field_width, padding, stride))
 
 
 class PublicFieldTensor:
