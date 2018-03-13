@@ -5,6 +5,7 @@ from functools import reduce
 from pond.tensor import NativeTensor
 from im2col.im2col import im2col_indices, col2im_indices
 import math
+import time
 
 try:
     from im2col.im2col_cython import im2col_cython, col2im_cython
@@ -188,7 +189,8 @@ class Relu(Layer):
         pass
 
     def forward(self, x):
-        x.expand_dims(axis=4).repeat(self.n_coeff, axis=4)
+        n_dims = len(x.shape)
+        x.expand_dims(axis=n_dims).repeat(self.n_coeff, axis=n_dims)
 
         for i in range(self.n_coeff)[::-1]:
             # x[:, :, :, :, i] = x[:, :, :, :, i] ** i

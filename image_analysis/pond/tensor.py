@@ -126,6 +126,7 @@ class NativeTensor:
     def __pow__(x, y):
         return x.pow(y)
 
+
     def transpose(x, *axes):
         if axes == ():
             return NativeTensor(x.values.transpose())
