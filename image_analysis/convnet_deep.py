@@ -21,6 +21,7 @@ y_train = to_categorical(y_train, 10)
 y_test = to_categorical(y_test, 10)
 
 
+tensortype = NativeTensor
 l2 = 0
 
 convnet_deep = Sequential([
@@ -43,10 +44,10 @@ convnet_deep = Sequential([
 
 convnet_deep.initialize()
 convnet_deep.fit(
-    x_train=DataLoader(x_train, wrapper=NativeTensor),
-    y_train=DataLoader(y_train, wrapper=NativeTensor),
-    x_valid=DataLoader(x_test, wrapper=NativeTensor),
-    y_valid=DataLoader(y_test, wrapper=NativeTensor),
+    x_train=DataLoader(x_train, wrapper=tensortype),
+    y_train=DataLoader(y_train, wrapper=tensortype),
+    x_valid=DataLoader(x_test, wrapper=tensortype),
+    y_valid=DataLoader(y_test, wrapper=tensortype),
     loss=CrossEntropy(),
     epochs=5,
     batch_size=128,

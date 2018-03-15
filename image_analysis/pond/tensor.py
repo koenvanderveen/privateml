@@ -225,12 +225,23 @@ assert PRECISION_INTEGRAL + 2 * PRECISION_FRACTIONAL < log(Q) / log(BASE)
 
 
 def encode(rationals):
-    return (rationals * BASE ** PRECISION_FRACTIONAL).astype('int').astype(DTYPE) % Q
+    # return (rationals * BASE ** PRECISION_FRACTIONAL).astype('int').astype(DTYPE) % Q
+    try:
+        return (rationals * BASE ** PRECISION_FRACTIONAL).astype('int').astype(DTYPE) % Q
+    except OverflowError as e:
+        print(rationals)
+        raise e
+        # print(e)
+        # exit()
 
 
 def decode(elements):
-    map_negative_range = np.vectorize(lambda element: element if element <= Q / 2 else element - Q)
-    return map_negative_range(elements) / BASE ** PRECISION_FRACTIONAL
+    try:
+        map_negative_range = np.vectorize(lambda element: element if element <= Q / 2 else element - Q)
+        return map_negative_range(elements) / BASE ** PRECISION_FRACTIONAL
+    except OverflowError as e:
+        print(elements)
+        raise e
 
 
 def wrap_if_needed(y):
@@ -290,7 +301,7 @@ class PublicEncodedTensor:
         elements = (Q + (2 * positive_numbers - 1) * elements) % Q  # x if x <= Q//2 else Q - x
         elements = np.floor_divide(elements, BASE ** amount)  # x // BASE**amount
         elements = (Q + (2 * positive_numbers - 1) * elements) % Q  # x if x <= Q//2 else Q - x
-        return PublicEncodedTensor.from_elements(elements)
+        return PublicEncodedTensor.from_elements(elements.astype(DTYPE))
 
     def add(x, y):
         y = wrap_if_needed(y)
@@ -403,17 +414,17 @@ class PublicEncodedTensor:
 
     def im2col(x, h_filter, w_filter, padding, strides):
         if use_cython:
-            return NativeTensor(im2col_cython(x.values, h_filter, w_filter, padding, strides))
+            return PublicEncodedTensor.from_elements(im2col_cython(x.elements.astype('float'), h_filter, w_filter, padding, strides))
         else:
-            return NativeTensor(im2col_indices(x, field_height=h_filter, field_width=w_filter, padding=padding,
+            return PublicEncodedTensor.from_elements(im2col_indices(x.elements.astype('float'), field_height=h_filter, field_width=w_filter, padding=padding,
                                                stride=strides))
 
     def col2im(x, imshape, field_height, field_width, padding, stride):
         if use_cython:
-            return NativeTensor(col2im_cython(x.values, imshape[0], imshape[1], imshape[2], imshape[3],
+            return PublicEncodedTensor.from_elements(col2im_cython(x.elements.astype('float'), imshape[0], imshape[1], imshape[2], imshape[3],
                                               field_height, field_width, padding, stride))
         else:
-            return NativeTensor(col2im_indices(x.values, imshape, field_height, field_width, padding, stride))
+            return PublicEncodedTensor.from_elements(col2im_indices(x.elements.astype('float'), imshape, field_height, field_width, padding, stride))
 
 
 class PublicFieldTensor:

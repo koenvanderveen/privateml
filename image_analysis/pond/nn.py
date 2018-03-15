@@ -107,11 +107,7 @@ class SoftmaxStable(Layer):
 
     def forward(self, x):
         # we add the - x.max() for numerical stability, i.e. to prevent overflow
-        try:
-            likelihoods = (x - x.max(axis=1, keepdims=True)).clip(-10.0, np.inf).exp()
-        except FloatingPointError:
-            print((x - x.max(axis=1, keepdims=True)))
-            exit()
+        likelihoods = (x - x.max(axis=1, keepdims=True)).clip(-10.0, np.inf).exp()
         probs = likelihoods.div(likelihoods.sum(axis=1, keepdims=True))
         self.cache = probs
         return probs
@@ -494,7 +490,7 @@ class CrossEntropy(Loss):
     def evaluate(self, probs_pred, probs_correct):
         batch_size = probs_pred.shape[0]
         losses = (probs_correct * probs_pred.log()).neg().sum(axis=1)
-        loss = losses.sum(axis=0).div(batch_size)
+        loss = losses.sum(axis=0, keepdims=True).div(batch_size)
         return loss
 
     def derive(self, y_pred, y_correct):
@@ -560,18 +556,21 @@ class Sequential(Model):
         return x
 
     def backward(self, d_y, learning_rate):
-        max_dy = 1.0
-        d_y_unscaled = d_y
         for layer in reversed(self.layers):
-            # d_y_scaled = d_y
-            d_y_unscaled = layer.backward(d_y, learning_rate)
+            d_y = layer.backward(d_y, learning_rate)
 
-            max_norm = max(d_y_unscaled.max().unwrap(), - d_y_unscaled.min().unwrap())
-            if max_norm > max_dy:
-                print("\n max dy > 0")
-                d_y = d_y_unscaled * (max_dy / max_norm)
-            else:
-                d_y = d_y_unscaled
+        # max_dy = 1.0
+        # d_y_unscaled = d_y
+        # for layer in reversed(self.layers):
+        #     # d_y_scaled = d_y
+        #     d_y_unscaled = layer.backward(d_y, learning_rate)
+        #
+        #     max_norm = max(d_y_unscaled.max().unwrap(), - d_y_unscaled.min().unwrap())
+        #     if max_norm > max_dy:
+        #         print("\n max dy > 0")
+        #         d_y = d_y_unscaled * (max_dy / max_norm)
+        #     else:
+        #         d_y = d_y_unscaled
 
     @staticmethod
     def print_progress(batch_index, n_batches, batch_size, epoch_start, train_loss=None, train_acc=None,
