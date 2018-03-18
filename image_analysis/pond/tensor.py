@@ -246,7 +246,7 @@ def decode(elements):
 
 def wrap_if_needed(y):
     if isinstance(y, int) or isinstance(y, float): return PublicEncodedTensor.from_values(np.array([y]))
-    if isinstance(y, np.ndarray): return PublicEncodedTensor.from_values(y)
+    if isinstance(y, np.ndarray):return PublicEncodedTensor.from_values(y)
     if isinstance(y, NativeTensor): return PublicEncodedTensor.from_values(y.values)
     return y
 
@@ -299,7 +299,7 @@ class PublicEncodedTensor:
         positive_numbers = (self.elements <= Q // 2).astype(int)
         elements = self.elements
         elements = (Q + (2 * positive_numbers - 1) * elements) % Q  # x if x <= Q//2 else Q - x
-        elements = np.floor_divide(elements, BASE ** amount)  # x // BASE**amount
+        elements = np.floor_divide(elements, BASE ** amount)        # x // BASE**amount
         elements = (Q + (2 * positive_numbers - 1) * elements) % Q  # x if x <= Q//2 else Q - x
         return PublicEncodedTensor.from_elements(elements.astype(DTYPE))
 
@@ -316,17 +316,17 @@ class PublicEncodedTensor:
     def __add__(x, y):
         return x.add(y)
 
-    def add_at(x, indices, y):
-
-        y = wrap_if_needed(y)
-        if isinstance(y, PublicEncodedTensor):
-            np.add.at(x.elements, indices, y.elements)
-        # if isinstance(y, PrivateEncodedTensor):
-        #     shares0 = np.add.at(x.elements, indices, y.shares0) % Q
-        #     shares1 = y.shares1
-        #     return PrivateEncodedTensor.from_shares(shares0, shares1)
-        else:
-            raise TypeError("%s does not support %s" % (type(x), type(y)))
+    # def add_at(x, indices, y):
+    #
+    #     y = wrap_if_needed(y)
+    #     if isinstance(y, PublicEncodedTensor):
+    #         np.add.at(x.elements, indices, y.elements)
+    #     # if isinstance(y, PrivateEncodedTensor):
+    #     #     shares0 = np.add.at(x.elements, indices, y.shares0) % Q
+    #     #     shares1 = y.shares1
+    #     #     return PrivateEncodedTensor.from_shares(shares0, shares1)
+    #     else:
+    #         raise TypeError("%s does not support %s" % (type(x), type(y)))
 
     def sub(x, y):
         y = wrap_if_needed(y)
@@ -339,14 +339,15 @@ class PublicEncodedTensor:
 
     def __gt__(x, y):
         y = wrap_if_needed(y)
-        if isinstance(y, PublicEncodedTensor): return PublicEncodedTensor(x.elements > y.elements)
+        if isinstance(y, PublicEncodedTensor): return PublicEncodedTensor.from_values(x.elements > y.elements)
         raise TypeError("%s does not support %s" % (type(x), type(y)))
 
     def mul(x, y):
         y = wrap_if_needed(y)
-        if isinstance(y, PublicFieldTensor): return PublicFieldTensor.from_elements((x.elements * y.elements) % Q)
-        if isinstance(y, PublicEncodedTensor): return PublicEncodedTensor.from_elements(
-            (x.elements * y.elements) % Q).truncate()
+        if isinstance(y, PublicFieldTensor):
+            return PublicFieldTensor.from_elements((x.elements * y.elements) % Q)
+        if isinstance(y, PublicEncodedTensor):
+            return PublicEncodedTensor.from_elements((x.elements * y.elements) % Q).truncate()
         if isinstance(y, PrivateEncodedTensor):
             shares0 = (x.elements * y.shares0) % Q
             shares1 = (x.elements * y.shares1) % Q
@@ -387,7 +388,7 @@ class PublicEncodedTensor:
         else:
             return PublicEncodedTensor.from_elements(x.elements.transpose(axes))
 
-    def sum(x, axis, keepdims=False):
+    def sum(x, axis=None, keepdims=False):
         return PublicEncodedTensor.from_elements(x.elements.sum(axis=axis, keepdims=keepdims))
 
     def argmax(x, axis):
@@ -414,10 +415,12 @@ class PublicEncodedTensor:
 
     def im2col(x, h_filter, w_filter, padding, strides):
         if use_cython:
-            return PublicEncodedTensor.from_elements(im2col_cython(x.elements.astype('float'), h_filter, w_filter, padding, strides))
+            return PublicEncodedTensor.from_elements(im2col_cython(x.elements.astype('float'), h_filter, w_filter, padding,
+                                                                   strides).astype('int').astype(DTYPE))
         else:
-            return PublicEncodedTensor.from_elements(im2col_indices(x.elements.astype('float'), field_height=h_filter, field_width=w_filter, padding=padding,
-                                               stride=strides))
+            return PublicEncodedTensor.from_elements(im2col_indices(x.elements.astype('float'),
+                                                                    field_height=h_filter, field_width=w_filter,
+                                                                    padding=padding,stride=strides).astype('int').astype(DTYPE))
 
     def col2im(x, imshape, field_height, field_width, padding, stride):
         if use_cython:

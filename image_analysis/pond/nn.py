@@ -2,7 +2,7 @@ import numpy as np
 import sys
 from datetime import datetime, timedelta
 from functools import reduce
-from pond.tensor import NativeTensor
+from pond.tensor import NativeTensor, PublicEncodedTensor
 # from im2col.im2col import im2col_indices, col2im_indices
 import math
 import time
@@ -24,8 +24,8 @@ class Dense(Layer):
         self.bias = None
 
     def initialize(self):
-        self.weights = NativeTensor(np.random.randn(self.num_features, self.num_nodes) * self.initial_scale)
-        self.bias = NativeTensor(np.zeros((1, self.num_nodes)))
+        self.weights = PublicEncodedTensor(np.random.randn(self.num_features, self.num_nodes) * self.initial_scale)
+        self.bias = PublicEncodedTensor(np.zeros((1, self.num_nodes)))
 
     def forward(self, x):
         y = x.dot(self.weights) + self.bias
@@ -259,7 +259,7 @@ class Conv2D():
 
     def initialize(self):
         # weights
-        self.filters = NativeTensor(self.filter_init(self.fshape))
+        self.filters = PublicEncodedTensor(self.filter_init(self.fshape))
         # init bias based on x
         self.bias = None
 
@@ -279,9 +279,10 @@ class Conv2D():
 
         # x to col
         X_col = x.im2col(h_filter, w_filter, self.padding, self.strides)
-
         W_col = self.filters.transpose(3, 2, 0, 1).reshape(n_filters, -1)
         out = W_col.dot(X_col)
+
+        # print(out.sum(keepdims=True).unwrap())
 
         out = out.reshape(n_filters, h_out, w_out, n_x)
         out = out.transpose(3, 0, 1, 2)
