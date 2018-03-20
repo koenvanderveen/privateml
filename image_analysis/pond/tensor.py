@@ -425,9 +425,10 @@ class PublicEncodedTensor:
     def col2im(x, imshape, field_height, field_width, padding, stride):
         if use_cython:
             return PublicEncodedTensor.from_elements(col2im_cython(x.elements.astype('float'), imshape[0], imshape[1], imshape[2], imshape[3],
-                                              field_height, field_width, padding, stride))
+                                              field_height, field_width, padding, stride).astype('int').astype(DTYPE))
         else:
-            return PublicEncodedTensor.from_elements(col2im_indices(x.elements.astype('float'), imshape, field_height, field_width, padding, stride))
+            return PublicEncodedTensor.from_elements(col2im_indices(x.elements.astype('float'), imshape, field_height,
+                                                                    field_width, padding, stride).astype('int').astype(DTYPE))
 
 
 class PublicFieldTensor:
