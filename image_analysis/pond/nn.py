@@ -24,8 +24,8 @@ class Dense(Layer):
         self.bias = None
 
     def initialize(self):
-        self.weights = PublicEncodedTensor(np.random.randn(self.num_features, self.num_nodes) * self.initial_scale)
-        self.bias = PublicEncodedTensor(np.zeros((1, self.num_nodes)))
+        self.weights = NativeTensor(np.random.randn(self.num_features, self.num_nodes) * self.initial_scale)
+        self.bias = NativeTensor(np.zeros((1, self.num_nodes)))
 
     def forward(self, x):
         y = x.dot(self.weights) + self.bias
@@ -259,30 +259,29 @@ class Conv2D():
 
     def initialize(self):
         # weights
-        self.filters = PublicEncodedTensor(self.filter_init(self.fshape))
+        self.filters = None
         # init bias based on x
         self.bias = None
 
     def forward(self, x):
-        # TODO: padding
-        self.initializer = type(x)
-
         # shapes, assuming NCHW
-        h_filter, w_filter, d_filters, n_filters = self.filters.shape
+        h_filter, w_filter, d_filters, n_filters = self.fshape
         n_x, d_x, h_x, w_x = x.shape
         h_out = int((h_x - h_filter + 2 * self.padding) / self.strides + 1)
         w_out = int((w_x - w_filter + 2 * self.padding) / self.strides + 1)
 
-        # init bias
+        self.initializer = type(x)
+        if self.filters is None:
+            self.filters = self.initializer(self.filter_init(self.fshape))
+
         if self.bias is None:
-            self.bias = NativeTensor(np.zeros((n_filters, h_out, w_out)))
+            self.bias = self.initializer(np.zeros((n_filters, h_out, w_out)))
+
 
         # x to col
         X_col = x.im2col(h_filter, w_filter, self.padding, self.strides)
         W_col = self.filters.transpose(3, 2, 0, 1).reshape(n_filters, -1)
         out = W_col.dot(X_col)
-
-        # print(out.sum(keepdims=True).unwrap())
 
         out = out.reshape(n_filters, h_out, w_out, n_x)
         out = out.transpose(3, 0, 1, 2)
@@ -554,6 +553,7 @@ class Sequential(Model):
     def forward(self, x):
         for layer in self.layers:
             x = layer.forward(x)
+            # print(x.unwrap().max())
         return x
 
     def backward(self, d_y, learning_rate):
