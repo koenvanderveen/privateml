@@ -107,6 +107,8 @@ class SoftmaxStable(Layer):
 
     def forward(self, x):
         # we add the - x.max() for numerical stability, i.e. to prevent overflow
+        # print(x.values.dtype)
+        # print((x - x.max(axis=1, keepdims=True)).clip(-10.0, np.inf).values.dtype)
         likelihoods = (x - x.max(axis=1, keepdims=True)).clip(-10.0, np.inf).exp()
         probs = likelihoods.div(likelihoods.sum(axis=1, keepdims=True))
         self.cache = probs
@@ -173,6 +175,7 @@ class Relu(Layer):
         self.n_coeff = order + 1
         self.coeff = NativeTensor(self.compute_coefficients_relu(order, domain, n))
         self.coeff_der = (self.coeff * NativeTensor(list(range(self.n_coeff))[::-1]))[:-1]
+        self.initializer = None
 
     def initialize(self):
         pass
@@ -180,10 +183,11 @@ class Relu(Layer):
     def forward(self, x):
         n_dims = len(x.shape)
         x.expand_dims(axis=n_dims).repeat(self.n_coeff, axis=n_dims)
+        self.initializer = type(x)
 
-        x[:, :, :, :, self.n_coeff-1] = NativeTensor(1)
+        x[..., self.n_coeff-1] = self.initializer(1)
         for i in range(self.n_coeff - 2)[::-1]:
-            x[:, :, :, :, i] = x[:, :, :, :, i] * x[:, :, :, :, i+1]
+            x[..., i] = x[..., i] * x[..., i+1]
 
         y = x.dot(self.coeff)
         self.cache = x[:, :, :, :, 1:]
