@@ -264,29 +264,17 @@ class Conv2D():
         self.bias = None
 
     def forward(self, x):
-        # shapes, assuming NCHW
-        h_filter, w_filter, d_filters, n_filters = self.fshape
-        n_x, d_x, h_x, w_x = x.shape
-        h_out = int((h_x - h_filter + 2 * self.padding) / self.strides + 1)
-        w_out = int((w_x - w_filter + 2 * self.padding) / self.strides + 1)
 
         self.initializer = type(x)
+        self.cached_input_shape = x.shape
+
         if self.filters is None:
             self.filters = self.initializer(self.filter_init(self.fshape))
 
+        out, self.cache = x.conv2d(self.filters, self.strides, self.padding)
+
         if self.bias is None:
-            self.bias = self.initializer(np.zeros((n_filters, h_out, w_out)))
-
-
-        # x to col
-        X_col = x.im2col(h_filter, w_filter, self.padding, self.strides)
-        W_col = self.filters.transpose(3, 2, 0, 1).reshape(n_filters, -1)
-        out = W_col.dot(X_col)
-
-        out = out.reshape(n_filters, h_out, w_out, n_x)
-        out = out.transpose(3, 0, 1, 2)
-        self.cache = X_col
-        self.cached_input_shape = x.shape
+            self.bias = self.initializer(np.zeros(out.shape))
 
         return out + self.bias
 
@@ -554,24 +542,14 @@ class Sequential(Model):
         for layer in self.layers:
             x = layer.forward(x)
             # print(x.unwrap().max())
+        exit()
         return x
 
     def backward(self, d_y, learning_rate):
         for layer in reversed(self.layers):
             d_y = layer.backward(d_y, learning_rate)
+            # print(d_y.unwrap().max())
 
-        # max_dy = 1.0
-        # d_y_unscaled = d_y
-        # for layer in reversed(self.layers):
-        #     # d_y_scaled = d_y
-        #     d_y_unscaled = layer.backward(d_y, learning_rate)
-        #
-        #     max_norm = max(d_y_unscaled.max().unwrap(), - d_y_unscaled.min().unwrap())
-        #     if max_norm > max_dy:
-        #         print("\n max dy > 0")
-        #         d_y = d_y_unscaled * (max_dy / max_norm)
-        #     else:
-        #         d_y = d_y_unscaled
 
     @staticmethod
     def print_progress(batch_index, n_batches, batch_size, epoch_start, train_loss=None, train_acc=None,

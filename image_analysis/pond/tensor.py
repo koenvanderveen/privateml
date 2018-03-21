@@ -135,7 +135,6 @@ class NativeTensor:
     def __pow__(x, y):
         return x.pow(y)
 
-
     def transpose(x, *axes):
         if axes == ():
             return NativeTensor(x.values.transpose())
@@ -200,6 +199,22 @@ class NativeTensor:
                                             field_height, field_width, padding, stride))
         else:
             return NativeTensor(col2im_indices(x.values, imshape, field_height, field_width, padding, stride))
+
+    def conv2d(x, filters, strides, padding):
+        # shapes, assuming NCHW
+        h_filter, w_filter, d_filters, n_filters = filters.shape
+        n_x, d_x, h_x, w_x = x.shape
+        h_out = int((h_x - h_filter + 2 * padding) / strides + 1)
+        w_out = int((w_x - w_filter + 2 * padding) / strides + 1)
+
+        # x to col
+        X_col = x.im2col(h_filter, w_filter, padding, strides)
+        W_col = filters.transpose(3, 2, 0, 1).reshape(n_filters, -1)
+        out = W_col.dot(X_col)
+
+        out = out.reshape(n_filters, h_out, w_out, n_x)
+        out = out.transpose(3, 0, 1, 2)
+        return out
 
 
 
@@ -431,6 +446,23 @@ class PublicEncodedTensor:
                                                                     field_width, padding, stride).astype('int').astype(DTYPE))
 
 
+    def conv2d(x, filters, strides, padding):
+        # shapes, assuming NCHW
+        h_filter, w_filter, d_filters, n_filters = filters.shape
+        n_x, d_x, h_x, w_x = x.shape
+        h_out = int((h_x - h_filter + 2 * padding) / strides + 1)
+        w_out = int((w_x - w_filter + 2 * padding) / strides + 1)
+
+        # x to col
+        X_col = x.im2col(h_filter, w_filter, padding, strides)
+        W_col = filters.transpose(3, 2, 0, 1).reshape(n_filters, -1)
+        out = W_col.dot(X_col)
+
+        out = out.reshape(n_filters, h_out, w_out, n_x)
+        out = out.transpose(3, 0, 1, 2)
+        return out
+
+
 class PublicFieldTensor:
 
     def __init__(self, elements):
@@ -485,6 +517,19 @@ class PublicFieldTensor:
             shares1 = (x.elements.dot(y.shares1)) % Q
             return PrivateFieldTensor.from_shares(shares0, shares1)
         raise TypeError("%s does not support %s" % (type(x), type(y)))
+
+
+    def transpose(x, *axes):
+        if axes == ():
+            return PublicFieldTensor.from_elements(x.elements.transpose())
+        else:
+            return PublicFieldTensor.from_elements(x.elements.transpose(axes))
+
+    def reshape(self, *shape):
+        # ugly hack to unwrap shape if the shape is given as a tuple
+        if isinstance(shape[0], tuple):
+            shape = shape[0]
+        return PublicFieldTensor.from_elements(self.elements.reshape(shape))
 
 
 def share(elements):
@@ -562,6 +607,52 @@ class PrivateFieldTensor:
             return PrivateFieldTensor.from_shares(shares0, shares1)
         raise TypeError("%s does not support %s" % (type(x), type(y)))
 
+    def transpose(x, *axes):
+        if axes == ():
+            return PrivateFieldTensor.from_shares(x.shares0.transpose(), x.shares1.transpose())
+        else:
+            return PrivateFieldTensor.from_shares(x.shares0.transpose(axes), x.shares1.transpose(axes))
+
+    def reshape(self, *shape):
+        # ugly hack to unwrap shape if the shape is given as a tuple
+        if isinstance(shape[0], tuple):
+            shape = shape[0]
+        return PrivateFieldTensor.from_shares(self.shares0.reshape(shape), self.shares1.reshape(shape))
+
+    def conv2d(x, y, strides, padding):
+        if isinstance(y, PublicFieldTensor):
+
+            # shapes, assuming NCHW
+            h_filter, w_filter, d_filters, n_filters = y.shape
+            n_x, d_x, h_x, w_x = x.shape
+            h_out = int((h_x - h_filter + 2 * padding) / strides + 1)
+            w_out = int((w_x - w_filter + 2 * padding) / strides + 1)
+
+            # x to col
+            X_col = x.im2col(h_filter, w_filter, padding, strides)
+            W_col = y.transpose(3, 2, 0, 1).reshape(n_filters, -1)
+
+            out = W_col.dot(X_col)
+            out = out.reshape(n_filters, h_out, w_out, n_x)
+            out = out.transpose(3, 0, 1, 2)
+            return out
+
+        raise TypeError("%s does not support %s" % (type(x), type(y)))
+
+    def im2col(x, h_filter, w_filter, padding, strides):
+        if use_cython:
+            shares0 = im2col_cython(x.shares0.astype('float'), h_filter, w_filter, padding,
+                                    strides).astype('int').astype(DTYPE)
+            shares1 = im2col_cython(x.shares1.astype('float'), h_filter, w_filter, padding,
+                                    strides).astype('int').astype(DTYPE)
+            return PrivateFieldTensor.from_shares(shares0, shares1)
+        else:
+            shares0 = im2col_indices(x.shares0.astype('float'), field_height=h_filter, field_width=w_filter,
+                                     padding=padding,stride=strides).astype('int').astype(DTYPE)
+            shares1 = im2col_indices(x.shares1.astype('float'), field_height=h_filter, field_width=w_filter,
+                                     padding=padding,stride=strides).astype('int').astype(DTYPE)
+            return PrivateFieldTensor.from_shares(shares0, shares1)
+
 
 def generate_mul_triple(shape):
     a = np.array([random.randrange(Q) for _ in range(np.prod(shape))]).astype(DTYPE).reshape(shape)
@@ -579,6 +670,27 @@ def generate_dot_triple(m, n, o):
     return PrivateFieldTensor.from_elements(a), \
            PrivateFieldTensor.from_elements(b), \
            PrivateFieldTensor.from_elements(ab)
+
+def generate_conv_triple(xshape, yshape, strides, padding):
+
+    h_filter, w_filter, d_filters, n_filters = yshape
+    n_x, d_x, h_x, w_x = xshape
+    h_out = int((h_x - h_filter + 2 * padding) / strides + 1)
+    w_out = int((w_x - w_filter + 2 * padding) / strides + 1)
+
+    a = np.array([random.randrange(Q) for _ in range(np.prod(xshape))]).astype(DTYPE).reshape(xshape)
+    b = np.array([random.randrange(Q) for _ in range(np.prod(yshape))]).astype(DTYPE).reshape(yshape)
+
+    if use_cython:
+        a_col = im2col_cython(a, h_filter, w_filter, padding, strides)
+    else:
+        a_col = im2col_indices(a, field_height=h_filter, field_width=w_filter, padding=padding, stride=strides)
+    b_col = b.transpose(3, 2, 0, 1).reshape(n_filters, -1)
+
+    a_conv_b = b_col.dot(a_col)
+    a_conv_b = a_conv_b.reshape(n_filters, h_out, w_out, n_x)
+    a_conv_b = a_conv_b.transpose(3, 0, 1, 2)
+    return a, b, a_conv_b
 
 
 def generate_matmul_triple(shape1, shape2):
@@ -766,12 +878,14 @@ class PrivateEncodedTensor:
             assert n == y.shape[0]
             if precomputed is None: precomputed = generate_dot_triple(m, n, o)
             a, b, ab = precomputed
-            alpha = (x - a).reveal()
-            beta = (y - b).reveal()
-            z = alpha.dot(beta) + \
-                alpha.dot(b) + \
-                a.dot(beta) + \
-                ab
+            alpha = (x - a).reveal() # (PrivateEncodedTensor - PrivateFieldTensor).reveal() = PublicFieldTensor
+            beta = (y - b).reveal()  # (PrivateEncodedTensor - PrivateFieldTensor).reveal() = PublicFieldTensor
+            z = alpha.dot(beta) + alpha.dot(b) + a.dot(beta) + ab
+            # PublicFieldTensor.dot(PublicFieldTensor) = PublicFieldTensor
+            # PublicFieldTensor.dot(PrivateFieldTensor) = PrivateFieldTensor
+            # PrivateFieldTensor.dot(PublicFieldTensor) = PrivateFieldTensor
+            # PrivateFieldTensor = PrivateFieldTensor
+            # PublicFieldTensor + PrivateFieldTensor + PrivateFieldTensor + PrivateFieldTensor = PrivateFieldTensor
             return PrivateEncodedTensor.from_shares(z.shares0, z.shares1).truncate()
         raise TypeError("%s does not support %s" % (type(x), type(y)))
 
@@ -832,6 +946,74 @@ class PrivateEncodedTensor:
     def pad(self, pad_width, mode='constant'):
         return PrivateEncodedTensor.from_shares(np.pad(self.shares0, pad_width=pad_width, mode=mode),
                                                 np.pad(self.shares1, pad_width=pad_width, mode=mode))
+
+
+    def im2col(x, h_filter, w_filter, padding, strides):
+        if use_cython:
+            shares0 = im2col_cython(x.shares0.astype('float'), h_filter, w_filter, padding,
+                                    strides).astype('int').astype(DTYPE)
+            shares1 = im2col_cython(x.shares1.astype('float'), h_filter, w_filter, padding,
+                                    strides).astype('int').astype(DTYPE)
+            return PrivateEncodedTensor.from_shares(shares0, shares1)
+        else:
+            shares0 = im2col_indices(x.shares0.astype('float'), field_height=h_filter, field_width=w_filter,
+                                     padding=padding,stride=strides).astype('int').astype(DTYPE)
+            shares1 = im2col_indices(x.shares1.astype('float'), field_height=h_filter, field_width=w_filter,
+                                     padding=padding,stride=strides).astype('int').astype(DTYPE)
+            return PrivateEncodedTensor.from_shares(shares0, shares1)
+
+
+    def col2im(x, imshape, field_height, field_width, padding, stride):
+        if use_cython:
+            shares0 =col2im_cython(x.shares0.astype('float'), imshape[0], imshape[1], imshape[2], imshape[3],
+                                   field_height, field_width, padding, stride).astype('int').astype(DTYPE)
+            shares1 =col2im_cython(x.shares1.astype('float'), imshape[0], imshape[1], imshape[2], imshape[3],
+                                   field_height, field_width, padding, stride).astype('int').astype(DTYPE)
+
+            return PrivateEncodedTensor.from_shares(shares0, shares1)
+        else:
+            shares0 = col2im_indices(x.shares0.astype('float'), imshape, field_height, field_width, padding,
+                                     stride).astype('int').astype(DTYPE)
+            shares1 = col2im_indices(x.shares1.astype('float'), imshape, field_height, field_width, padding,
+                                     stride).astype('int').astype(DTYPE)
+            return PrivateEncodedTensor.from_shares(shares0, shares1)
+
+
+    def conv2d(x, filters, strides, padding, precomputed=None, use_specialized_triple=True):
+        h_filter, w_filter, d_filters, n_filters = filters.shape
+        n_x, d_x, h_x, w_x = x.shape
+        h_out = int((h_x - h_filter + 2 * padding) / strides + 1)
+        w_out = int((w_x - w_filter + 2 * padding) / strides + 1)
+
+        if isinstance(filters, PublicEncodedTensor) or (isinstance(filters, PrivateEncodedTensor) and not use_specialized_triple):
+            X_col = x.im2col(h_filter, w_filter, padding, strides)
+            W_col = filters.transpose(3, 2, 0, 1).reshape(n_filters, -1)
+            out = W_col.dot(X_col).reshape(n_filters, h_out, w_out, n_x).transpose(3, 0, 1, 2)
+            return out
+
+        if isinstance(filters, PrivateEncodedTensor):
+            if use_specialized_triple:
+
+                if precomputed is None:
+                    precomputed = generate_conv_triple(x.shape, filters.shape, strides, padding)
+                a, b, a_conv_b = precomputed          # PrivateFieldTensors
+                alpha = (x - a).reveal()        # (PrivateEncodedTensor - PrivateFieldTensor).reveal() = PublicFieldTensor
+                beta = (filters - b).reveal()   # (PrivateEncodedTensor - PrivateFieldTensor).reveal() = PublicFieldTensor
+
+                alpha_col = alpha.im2col(h_filter, w_filter, padding, strides) # PublicFieldTensor
+                alpha_conv_beta = alpha_col.dot(beta).transpose(3, 2, 0, 1).reshape(n_filters, -1)
+                alpha_conv_b = alpha_col.dot(b).transpose(3, 2, 0, 1).reshape(n_filters, -1)
+
+                z = alpha_conv_beta + alpha_conv_b + a.conv2d(beta) + a_conv_b
+
+                return PrivateEncodedTensor.from_shares(z.shares0, z.shares1).truncate()
+                # PublicFieldTensor.dot(PublicFieldTensor) = PublicFieldTensor
+                # PublicFieldTensor.dot(PrivateFieldTensor) = PrivateFieldTensor
+                # PrivateFieldTensor.conv2d(PublicFieldTensor) = PrivateFieldTensor
+                # PrivateFieldTensor = PrivateFieldTensor
+                # PublicFieldTensor + PrivateFieldTensor + PrivateFieldTensor + PrivateFieldTensor = PrivateFieldTensor
+
+        raise TypeError("%s does not support %s" % (type(x), type(filters)))
 
 
 ANALYTIC_STORE = []
