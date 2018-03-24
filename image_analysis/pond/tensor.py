@@ -160,8 +160,6 @@ class NativeTensor:
         return NativeTensor.from_values(x.values.min(axis=axis, keepdims=keepdims))
 
     def exp(x):
-        print(np)
-        print(x)
         return NativeTensor(np.exp(x.values))
 
     def log(x):
@@ -218,6 +216,18 @@ class NativeTensor:
         out = out.transpose(3, 0, 1, 2)
         return out, X_col
 
+    def conv2d_bw(x, d_y, filter_shape, cached_col, precomputed=None, use_specialized_triple=True):
+        if isinstance(d_y, NativeTensor) or isinstance(d_y, PublicEncodedTensor):
+            assert cached_col is not None
+            h_filter, w_filter, d_filter, n_filter = filter_shape
+            X_col = cached_col
+            dout_reshaped = d_y.transpose(1, 2, 3, 0).reshape(n_filter, -1)
+            dw = dout_reshaped.dot(X_col.transpose())
+            dw = dw.reshape(filter_shape)
+            return dw
+
+        raise TypeError("%s does not support %s" % (type(x), type(y)))
+
 
 
 DTYPE = 'object'
@@ -255,7 +265,7 @@ def encode(rationals):
 def decode(elements):
     try:
         map_negative_range = np.vectorize(lambda element: element if element <= Q / 2 else element - Q)
-        return map_negative_range(elements) / BASE ** PRECISION_FRACTIONAL
+        return (map_negative_range(elements) / BASE ** PRECISION_FRACTIONAL).astype('float')
     except OverflowError as e:
         print(elements)
         raise e
@@ -469,6 +479,19 @@ class PublicEncodedTensor:
         return out, X_col
 
 
+    def conv2d_bw(x, d_y, filter_shape, cached_col, precomputed=None, use_specialized_triple=True):
+        if isinstance(d_y, NativeTensor) or isinstance(d_y, PublicEncodedTensor):
+            assert cached_col is not None
+            h_filter, w_filter, d_filter, n_filter = filter_shape
+            X_col = cached_col
+            dout_reshaped = d_y.transpose(1, 2, 3, 0).reshape(n_filter, -1)
+            dw = dout_reshaped.dot(X_col.transpose())
+            dw = dw.reshape(filter_shape)
+            return dw
+
+        raise TypeError("%s does not support %s" % (type(x), type(y)))
+
+
 class PublicFieldTensor:
 
     def __init__(self, elements):
@@ -677,7 +700,6 @@ def generate_mul_triple(shape):
            PrivateFieldTensor.from_elements(b), \
            PrivateFieldTensor.from_elements(ab)
 
-
 def generate_dot_triple(m, n, o):
     a = np.array([random.randrange(Q) for _ in range(m * n)]).astype(DTYPE).reshape((m, n))
     b = np.array([random.randrange(Q) for _ in range(n * o)]).astype(DTYPE).reshape((n, o))
@@ -706,8 +728,24 @@ def generate_conv_triple(xshape, yshape, strides, padding):
     a_conv_b = a_conv_b.reshape(n_filters, h_out, w_out, n_x)
     a_conv_b = a_conv_b.transpose(3, 0, 1, 2)
     return PrivateFieldTensor.from_elements(a), PrivateFieldTensor.from_elements(b), \
-           PrivateFieldTensor.from_elements(a_conv_b)
+           PrivateFieldTensor.from_elements(a_conv_b), a_col
 
+def generate_convbw_triple(xshape, yshape, outshape, a=None, a_col=None):
+    if a is None:
+        a = np.array([random.randrange(Q) for _ in range(np.prod(xshape))]).astype(DTYPE).reshape(xshape)
+    else:
+        a = a.reveal().elements
+
+    if a_col is None:
+        a_col = a.im2col()
+    else:
+        a_col = a_col
+
+    b = np.array([random.randrange(Q) for _ in range(np.prod(yshape))]).astype(DTYPE).reshape(yshape)
+
+    a_convbw_b = b.dot(a_col.transpose()).reshape(outshape)
+    return PrivateFieldTensor.from_elements(a), PrivateFieldTensor.from_elements(b), \
+           PrivateFieldTensor.from_elements(a_convbw_b)
 
 def generate_matmul_triple(shape1, shape2):
     a = np.array([random.randrange(Q) for _ in range(m * n)]).astype(DTYPE).reshape(shape1)
@@ -716,23 +754,6 @@ def generate_matmul_triple(shape1, shape2):
     return PrivateFieldTensor.from_elements(a), \
            PrivateFieldTensor.from_elements(b), \
            PrivateFieldTensor.from_elements(ab)
-
-
-# def generate_mul_triple(shape):
-#     a = np.zeros(shape).astype(int).astype(DTYPE)
-#     b = np.zeros(shape).astype(int).astype(DTYPE)
-#     ab = (a * b) % Q
-#     return PrivateFieldTensor.from_elements(a), \
-#            PrivateFieldTensor.from_elements(b), \
-#            PrivateFieldTensor.from_elements(ab)
-# 
-# def generate_dot_triple(m, n, o):
-#     a = np.zeros((m,n)).astype(int).astype(DTYPE)
-#     b = np.zeros((n,o)).astype(int).astype(DTYPE)
-#     ab = np.dot(a, b)
-#     return PrivateFieldTensor.from_elements(a), \
-#            PrivateFieldTensor.from_elements(b), \
-#            PrivateFieldTensor.from_elements(ab)
 
 
 class PrivateEncodedTensor:
@@ -1006,7 +1027,7 @@ class PrivateEncodedTensor:
         h_out = int((h_x - h_filter + 2 * padding) / strides + 1)
         w_out = int((w_x - w_filter + 2 * padding) / strides + 1)
 
-        if isinstance(filters, PublicEncodedTensor) or (isinstance(filters, PrivateEncodedTensor) and not use_specialized_triple):
+        if isinstance(filters, PublicEncodedTensor):
             X_col = x.im2col(h_filter, w_filter, padding, strides)
             W_col = filters.transpose(3, 2, 0, 1).reshape(n_filters, -1)
             out = W_col.dot(X_col).reshape(n_filters, h_out, w_out, n_x).transpose(3, 0, 1, 2)
@@ -1017,7 +1038,7 @@ class PrivateEncodedTensor:
 
                 if precomputed is None:
                     precomputed = generate_conv_triple(x.shape, filters.shape, strides, padding)
-                a, b, a_conv_b = precomputed          # PrivateFieldTensors
+                a, b, a_conv_b, a_col = precomputed          # PrivateFieldTensors
 
                 alpha = (x - a).reveal()        # (PrivateEncodedTensor - PrivateFieldTensor).reveal() = PublicFieldTensor
                 beta = (filters - b).reveal()   # (PrivateEncodedTensor - PrivateFieldTensor).reveal() = PublicFieldTensor
@@ -1033,14 +1054,72 @@ class PrivateEncodedTensor:
                 _ = None # remove cache from memory
                 z = alpha_conv_beta + alpha_conv_b + a_conv_beta + a_conv_b
 
-                return PrivateEncodedTensor.from_shares(z.shares0, z.shares1).truncate(), alpha_col
+                return PrivateEncodedTensor.from_shares(z.shares0, z.shares1).truncate(), (a, a_col, alpha_col)
                 # PublicFieldTensor.dot(PublicFieldTensor) = PublicFieldTensor
                 # PublicFieldTensor.dot(PrivateFieldTensor) = PrivateFieldTensor
                 # PrivateFieldTensor.conv2d(PublicFieldTensor) = PrivateFieldTensor
                 # PrivateFieldTensor = PrivateFieldTensor
                 # PublicFieldTensor + PrivateFieldTensor + PrivateFieldTensor + PrivateFieldTensor = PrivateFieldTensor
+            else:
+                X_col = x.im2col(h_filter, w_filter, padding, strides)
+                W_col = filters.transpose(3, 2, 0, 1).reshape(n_filters, -1)
+                out = W_col.dot(X_col).reshape(n_filters, h_out, w_out, n_x).transpose(3, 0, 1, 2)
+                return out, X_col
 
         raise TypeError("%s does not support %s" % (type(x), type(filters)))
+
+
+
+    def conv2d_bw(x, d_y, filter_shape, cache, precomputed=None,
+                  use_specialized_triple=True, reuse_mask=True):
+        """
+        :param d_y:
+        :param filter_shape:
+        :param cached_col: for Native and PublicEncoded Tensors we cache X_col, for PrivateEncodedTensors we cache alpha_col
+        :param precomputed:
+        :param use_specialized_triple:
+        :return:
+        """
+
+
+        h_filter, w_filter, d_filter, n_filter = filter_shape
+        d_y_reshaped = d_y.transpose(1, 2, 3, 0).reshape(n_filter, -1)
+
+        if isinstance(d_y, PublicEncodedTensor) or isinstance(d_y, NativeTensor):
+            X_col = cache
+            dw = d_y_reshaped.dot(X_col.transpose())
+            dw = dw.reshape(filter_shape)
+            return dw
+        if isinstance(d_y, PrivateEncodedTensor):
+            # we need: x, a, a_col, alpha_col
+            if reuse_mask:
+                a, a_col, alpha_col = cache
+                a, b, a_convbw_b = generate_convbw_triple(a.shape, d_y_reshaped.shape, filter_shape, a=a,
+                                                          a_col=a_col)
+                beta = (d_y_reshaped - b).reveal()
+
+                alpha_convbw_beta = beta.dot(alpha_col.transpose()).reshape(filter_shape)
+                alpha_convbw_b = b.dot(alpha_col.transpose()).reshape(filter_shape)
+                a_convbw_beta = beta.dot(a_col.transpose()).reshape(filter_shape)
+                a_convbw_b = b.dot(a_col.transpose()).reshape(filter_shape)
+
+                z = alpha_convbw_beta + alpha_convbw_b + a_convbw_beta + a_convbw_b
+                return z
+
+            else:
+                assert False
+                # a, b, a_convbw_b = generate_convbw_triple(x.shape, filter_shape, a=mask_x)
+                # alpha = (x - a).reveal()        # (PrivateEncodedTensor - PrivateFieldTensor).reveal() = PublicFieldTensor
+                # alpha_col = alpha.im2col(h_filter, w_filter, padding, strides) # PublicFieldTensor
+
+
+
+
+
+
+
+
+            pass
 
 
 ANALYTIC_STORE = []

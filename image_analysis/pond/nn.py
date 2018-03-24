@@ -107,8 +107,6 @@ class SoftmaxStable(Layer):
 
     def forward(self, x):
         # we add the - x.max() for numerical stability, i.e. to prevent overflow
-        # print(x.values.dtype)
-        # print((x - x.max(axis=1, keepdims=True)).clip(-10.0, np.inf).values.dtype)
         likelihoods = (x - x.max(axis=1, keepdims=True)).clip(-10.0, np.inf).exp()
         probs = likelihoods.div(likelihoods.sum(axis=1, keepdims=True))
         self.cache = probs
@@ -119,8 +117,6 @@ class SoftmaxStable(Layer):
         batch_size = probs.shape[0]
         d_scores = probs - d_probs
         d_scores = d_scores.div(batch_size)
-        # print(d_scores)
-        # print(d_scores)
         return d_scores
 
 
@@ -145,7 +141,6 @@ class Softmax(Layer):
         batch_size = probs.shape[0]
         d_scores = probs - d_probs
         d_scores = d_scores.div(batch_size)
-        # print(d_scores)
         return d_scores
 
 
@@ -257,6 +252,7 @@ class Conv2D():
         self.filter_init = filter_init
         self.l2reg_lambda = l2reg_lambda
         self.cache = None
+        self.cache2 = None
         self.cached_input_shape = None
         self.initializer = None
         assert channels_first
@@ -271,26 +267,25 @@ class Conv2D():
 
         self.initializer = type(x)
         self.cached_input_shape = x.shape
+        self.cache = x
 
         if self.filters is None:
             self.filters = self.initializer(self.filter_init(self.fshape))
 
-        out, self.cache = x.conv2d(self.filters, self.strides, self.padding)
+        out, self.cache2 = x.conv2d(self.filters, self.strides, self.padding)
 
         if self.bias is None:
-            self.bias = self.initializer(np.zeros(out.shape))
+            self.bias = self.initializer(np.zeros(out.shape[1:]))
 
         return out + self.bias
 
     def backward(self, d_y, learning_rate):
         # cache
-        X_col = self.cache
+        x = self.cache
         h_filter, w_filter, d_filter, n_filter = self.filters.shape
 
-        # weights
-        dout_reshaped = d_y.transpose(1, 2, 3, 0).reshape(n_filter, -1)
-        dw = dout_reshaped.dot(X_col.transpose())
-        dw = dw.reshape(self.filters.shape)
+        # weight update and regularization
+        dw = x.conv2d_bw(d_y, self.filters.shape, self.cache2)
         dw += self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
         self.filters = ((dw * learning_rate).neg() + self.filters)
 
@@ -300,6 +295,7 @@ class Conv2D():
 
         # delta
         W_reshape = self.filters.reshape(n_filter, -1)
+        dout_reshaped = d_y.transpose(1, 2, 3, 0).reshape(n_filter, -1)
         dx_col = W_reshape.transpose().dot(dout_reshaped)
 
         dx = dx_col.col2im(imshape=self.cached_input_shape, field_height=h_filter, field_width=w_filter,
@@ -543,16 +539,17 @@ class Sequential(Model):
             layer.initialize()
 
     def forward(self, x):
+        start = time.time()
         for layer in self.layers:
             x = layer.forward(x)
-            # print(x.unwrap().max())
-        exit()
+            # print(layer.__class__, time.time()-start)
+            # start = time.time()
+        # exit()
         return x
 
     def backward(self, d_y, learning_rate):
         for layer in reversed(self.layers):
             d_y = layer.backward(d_y, learning_rate)
-            # print(d_y.unwrap().max())
 
 
     @staticmethod
@@ -614,7 +611,6 @@ class Sequential(Model):
                 d_y = loss.derive(y_pred, y_batch)
                 self.backward(d_y, learning_rate)
 
-                # print status
                 if verbose >= 1:
                     if batch_index != 0 and (batch_index + 1) % eval_n_batches == 0:
                         # validation print
