@@ -23,26 +23,41 @@ class Dense(Layer):
         self.weights = None
         self.bias = None
 
-    def initialize(self):
-        self.weights = NativeTensor(np.random.randn(self.num_features, self.num_nodes) * self.initial_scale)
-        self.bias = NativeTensor(np.zeros((1, self.num_nodes)))
+    def initialize(self, initializer=None):
+        if initializer is None:
+            self.weights = None
+            self.bias = None
+        else:
+            self.weights = initializer(np.random.randn(self.num_features, self.num_nodes) * self.initial_scale)
+            self.bias = initializer(np.zeros((1, self.num_nodes)))
 
     def forward(self, x):
+        self.initializer = type(x)
+        if self.weights is None:
+            self.weights = self.initializer(np.random.randn(self.num_features, self.num_nodes) * self.initial_scale)
+        if self.bias is None:
+            self.bias = self.initializer(np.zeros((1, self.num_nodes)))
+
         y = x.dot(self.weights) + self.bias
         # cache result for backward pass
         self.cache = x
         return y
 
     def backward(self, d_y, learning_rate):
+        # cache
         x = self.cache
+        # compute delta
+        d_x = d_y.dot(self.weights.transpose())
         # compute gradients for internal parameters and update
-        d_weights = x.transpose().dot(d_y) + self.weights * (self.l2reg_lambda / x.shape[0])
+        d_weights = x.transpose().dot(d_y)
+        if self.l2reg_lambda > 0:
+            d_weights = d_weights + self.weights * (self.l2reg_lambda / x.shape[0])
 
         d_bias = d_y.sum(axis=0)
+        # update weights and bias
         self.weights = (d_weights * learning_rate).neg() + self.weights
         self.bias = (d_bias * learning_rate).neg() + self.bias
-        # compute and return external gradient
-        d_x = d_y.dot(self.weights.transpose())
+
         return d_x
 
 
@@ -257,11 +272,12 @@ class Conv2D():
         self.initializer = None
         assert channels_first
 
-    def initialize(self):
+    def initialize(self, model=None):
         # weights
         self.filters = None
         # init bias based on x
         self.bias = None
+        self.model = model
 
     def forward(self, x):
 
@@ -284,22 +300,26 @@ class Conv2D():
         x = self.cache
         h_filter, w_filter, d_filter, n_filter = self.filters.shape
 
+        # delta (do not compute if this layer is the first layer)
+        if self.model.layers.index(self) != 0:
+            W_reshape = self.filters.reshape(n_filter, -1)
+            dout_reshaped = d_y.transpose(1, 2, 3, 0).reshape(n_filter, -1)
+            dx_col = W_reshape.transpose().dot(dout_reshaped)
+
+            dx = dx_col.col2im(imshape=self.cached_input_shape, field_height=h_filter, field_width=w_filter,
+                               padding=self.padding, stride=self.strides)
+        else:
+            dx = None
+
         # weight update and regularization
         dw = x.conv2d_bw(d_y, self.filters.shape, self.cache2)
-        dw += self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
+        if self.l2reg_lambda > 0: dw = dw + self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
         self.filters = ((dw * learning_rate).neg() + self.filters)
 
         # biases
         d_bias = d_y.sum(axis=0)
         self.bias = ((d_bias * learning_rate).neg() + self.bias)
 
-        # delta
-        W_reshape = self.filters.reshape(n_filter, -1)
-        dout_reshaped = d_y.transpose(1, 2, 3, 0).reshape(n_filter, -1)
-        dx_col = W_reshape.transpose().dot(dout_reshaped)
-
-        dx = dx_col.col2im(imshape=self.cached_input_shape, field_height=h_filter, field_width=w_filter,
-                           padding=self.padding, stride=self.strides)
         return dx
 
 
@@ -537,20 +557,17 @@ class Sequential(Model):
     def initialize(self):
         for layer in self.layers:
             layer.initialize()
+            if isinstance(layer, Conv2D):
+                layer.initialize(self)
 
     def forward(self, x):
-        start = time.time()
         for layer in self.layers:
             x = layer.forward(x)
-            # print(layer.__class__, time.time()-start)
-            # start = time.time()
-        # exit()
         return x
 
     def backward(self, d_y, learning_rate):
         for layer in reversed(self.layers):
             d_y = layer.backward(d_y, learning_rate)
-
 
     @staticmethod
     def print_progress(batch_index, n_batches, batch_size, epoch_start, train_loss=None, train_acc=None,
