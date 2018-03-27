@@ -424,7 +424,7 @@ class AveragePooling2D():
         x = self.cache
         d_y_expanded = d_y.repeat(self.pool_size[0], axis=2)
         d_y_expanded = d_y_expanded.repeat(self.pool_size[1], axis=3)
-        d_x = (d_y_expanded * x) / self.pool_area
+        d_x = d_y_expanded / self.pool_area
         return d_x
 
 
