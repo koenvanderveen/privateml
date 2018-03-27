@@ -160,8 +160,6 @@ class NativeTensor:
         return NativeTensor.from_values(x.values.min(axis=axis, keepdims=keepdims))
 
     def exp(x):
-        print(np)
-        print(x)
         return NativeTensor(np.exp(x.values))
 
     def log(x):
