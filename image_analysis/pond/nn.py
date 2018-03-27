@@ -278,7 +278,7 @@ class Conv2D():
         out, self.cache = x.conv2d(self.filters, self.strides, self.padding)
 
         if self.bias is None:
-            self.bias = self.initializer(np.zeros(out.shape[1:]))
+            self.bias = self.initializer(np.zeros(out.shape[1   :]))
 
         return out + self.bias
 
