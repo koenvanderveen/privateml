@@ -18,7 +18,7 @@ _ = np.seterr(over='raise')
 _ = np.seterr(under='raise')
 _ = np.seterr(invalid='raise')
 
-tensortype = PublicEncodedTensor
+tensortype = NativeTensor
 
 convnet_shallow = Sequential([
     Conv2D((3, 3, 1, 16), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
@@ -37,9 +37,8 @@ convnet_shallow.fit(
     x_valid=DataLoader(x_test, wrapper=tensortype),
     y_valid=DataLoader(y_test, wrapper=tensortype),
     loss=CrossEntropy(),
-    epochs=5,
-    batch_size=128,
+    epochs=1,
+    batch_size=256,
     verbose=1,
     learning_rate=0.01
 )
-
