@@ -3,15 +3,15 @@ import sys
 from datetime import datetime, timedelta
 from functools import reduce
 from pond.tensor import NativeTensor, PublicEncodedTensor
+
+import pond.tensor as t
 # from im2col.im2col import im2col_indices, col2im_indices
 import math
 import time
 
 
-
 class Layer:
     pass
-
 
 class Dense(Layer):
 
@@ -291,11 +291,7 @@ class Conv2D():
         out, self.cache2 = x.conv2d(self.filters, self.strides, self.padding)
 
         if self.bias is None:
-<<<<<<< HEAD
-            self.bias = self.initializer(np.zeros(out.shape[1   :]))
-=======
             self.bias = self.initializer(np.zeros(out.shape[1:]))
->>>>>>> b94cbc40f830db868bd488606fb99b8bf64e073b
 
         return out + self.bias
 
@@ -567,11 +563,22 @@ class Sequential(Model):
     def forward(self, x):
         for layer in self.layers:
             x = layer.forward(x)
+            # print()
+            # print(layer.__class__.__name__)
+            # print()
+            # print(t.COMMUNICATED_VALUES)
+            # print(t.ROUNDS)
+
         return x
 
     def backward(self, d_y, learning_rate):
         for layer in reversed(self.layers):
             d_y = layer.backward(d_y, learning_rate)
+            # print()
+            # print(layer.__class__.__name__)
+            # print()
+            # print(t.COMMUNICATED_VALUES)
+            # print(t.ROUNDS)
 
     @staticmethod
     def print_progress(batch_index, n_batches, batch_size, epoch_start, train_loss=None, train_acc=None,
