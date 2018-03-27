@@ -2,14 +2,16 @@ import numpy as np
 cimport numpy as np
 cimport cython
 
-DTYPE = np.float64
-ctypedef np.float64_t DTYPE_t
+# DTYPE = np.float64
+# ctypedef np.float64_t DTYPE_t
+DTYPE = np.object
+ctypedef object DTYPE_t
 
 # ctypedef fused DTYPE_t:
     # np.float32_t
     # np.float64_t
 
-def im2col_cython(np.ndarray[DTYPE_t, ndim=4] x, int field_height,
+def im2col_cython_object(np.ndarray[DTYPE_t, ndim=4] x, int field_height,
                   int field_width, int padding, int stride):
     cdef int N = x.shape[0]
     cdef int C = x.shape[1]
@@ -54,7 +56,7 @@ cdef int im2col_cython_inner(np.ndarray[DTYPE_t, ndim=2] cols,
 
 
 
-def col2im_cython(np.ndarray[DTYPE_t, ndim=2] cols, int N, int C, int H, int W,
+def col2im_cython_object(np.ndarray[DTYPE_t, ndim=2] cols, int N, int C, int H, int W,
                   int field_height, int field_width, int padding, int stride):
     cdef np.ndarray x = np.empty((N, C, H, W), dtype=cols.dtype)
     cdef int HH = (H + 2 * padding - field_height) / stride + 1
@@ -86,7 +88,7 @@ cdef int col2im_cython_inner(np.ndarray[DTYPE_t, ndim=2] cols,
                     for xx in range(WW):
                         for i in range(N):
                             col = yy * WW * N + xx * N + i
-                            x_padded[i, c, stride * yy + ii, stride * xx + jj] += cols[row, col]
+                            x_padded[i, c, stride * yy + ii, stride * xx + jj] = x_padded[i, c, stride * yy + ii, stride * xx + jj] + cols[row, col]
 
 
 @cython.boundscheck(False)
@@ -103,7 +105,7 @@ cdef col2im_6d_cython_inner(np.ndarray[DTYPE_t, ndim=6] cols,
                 for ww in range(WW):
                     for h in range(out_h):
                         for w in range(out_w):
-                            x_padded[n, c, stride * h + hh, stride * w + ww] += cols[c, hh, ww, n, h, w]
+                            x_padded[n, c, stride * h + hh, stride * w + ww] = x_padded[n, c, stride * h + hh, stride * w + ww] + cols[c, hh, ww, n, h, w]
 
 
 def col2im_6d_cython(np.ndarray[DTYPE_t, ndim=6] cols, int N, int C, int H, int W,
