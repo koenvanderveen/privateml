@@ -5,7 +5,6 @@ from pond.nn import Dense, ReluExact, Relu, Reveal, CrossEntropy, SoftmaxStable,
                     Sequential, DataLoader, Conv2D, AveragePooling2D, Flatten
 from keras.utils import to_categorical
 np.random.seed(42)
-import datetime
 
 # Read data.
 (x_train, y_train), (x_test, y_test) = keras.datasets.mnist.load_data()
@@ -18,12 +17,13 @@ _ = np.seterr(over='raise')
 _ = np.seterr(under='raise')
 _ = np.seterr(invalid='raise')
 
-tensortype = NativeTensor
+tensortype = PrivateEncodedTensor
 
 convnet_shallow = Sequential([
     Conv2D((3, 3, 1, 16), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
-    ReluExact(),
     AveragePooling2D(pool_size=(2, 2)),
+    Relu(order=3),
+    # ReluExact(),
     Flatten(),
     Dense(10, 3136),
     Reveal(),
