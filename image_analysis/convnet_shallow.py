@@ -21,7 +21,6 @@ tensortype = PrivateEncodedTensor
 
 convnet_shallow = Sequential([
     Conv2D((3, 3, 1, 16), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
-    Relu(order=3),
     AveragePooling2D(pool_size=(2, 2)),
     Relu(order=3),
     # ReluExact(),
@@ -39,7 +38,7 @@ convnet_shallow.fit(
     y_valid=DataLoader(y_test, wrapper=tensortype),
     loss=CrossEntropy(),
     epochs=1,
-    batch_size=32,
+    batch_size=128,
     verbose=1,
     learning_rate=0.01
 )
