@@ -579,7 +579,7 @@ class Sequential(Model):
         sys.stdout.flush()
 
     def fit(self, x_train, y_train, x_valid=None, y_valid=None, loss=None, batch_size=32, epochs=1000,
-            learning_rate=.01, verbose=0, eval_n_batches=None, file_name=None):
+            learning_rate=.01, verbose=0, eval_n_batches=None, results_file=None):
 
         if not isinstance(x_train, DataLoader): x_train = DataLoader(x_train)
         if not isinstance(y_train, DataLoader): y_train = DataLoader(y_train)
@@ -593,7 +593,11 @@ class Sequential(Model):
             eval_n_batches = n_batches
 
         start_time = time.time()
-        with open(file_name, 'w') as f:
+
+        if results_file is not None:
+            results_file = 'results/' + results_file + '.csv'
+
+        with open(results_file, 'w') as f:
             f.write("type, epoch, batch_index, time, train_loss, train_acc, val_loss, val_acc\n")
             for epoch in range(epochs):
                 epoch_start = time.time()
@@ -624,13 +628,13 @@ class Sequential(Model):
                             val_acc = np.mean(y_valid.all_data().unwrap().argmax(axis=1) == y_pred_val.unwrap().argmax(axis=1))
                             self.print_progress(batch_index, n_batches, batch_size, epoch_start, train_acc=acc, train_loss=train_loss,
                                                 val_loss=val_loss, val_acc=val_acc)
-                            if file_name:
+                            if results_file:
                                 time_passed = time.time() - start_time
                                 f.write("train, {}, {}, {}, {}, {}, {}, {}\n".format(epoch, batch_index, time_passed, train_loss, acc, val_loss, val_acc))
                         else:
                             # normal print
                             self.print_progress(batch_index, n_batches, batch_size, epoch_start, train_acc=acc, train_loss=train_loss)
-                            if file_name:
+                            if results_file:
                                 time_passed = time.time() - start_time
                                 f.write("train, {}, {}, {}, {}, {}, ,\n".format(epoch, batch_index, time_passed, train_loss, acc))
 

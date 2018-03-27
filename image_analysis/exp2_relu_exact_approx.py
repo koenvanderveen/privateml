@@ -71,11 +71,11 @@ convnet_shallow_exact.fit(
     batch_size=128,
     verbose=1,
     learning_rate=0.01,
-    results_file='convnet_shallow_exact'
+    results_file='exp2_convnet_shallow_exact'
 )
 
-convnet_shallow_exact.initialize()
-convnet_shallow_exact.fit(
+convnet_shallow_approx.initialize()
+convnet_shallow_approx.fit(
     x_train=DataLoader(x_train, wrapper=tensortype),
     y_train=DataLoader(y_train, wrapper=tensortype),
     x_valid=DataLoader(x_test, wrapper=tensortype),
@@ -85,11 +85,11 @@ convnet_shallow_exact.fit(
     batch_size=128,
     verbose=1,
     learning_rate=0.01,
-    results_file='convnet_shallow_exact'
+    results_file='exp2_convnet_shallow_approx'
 )
 
-convnet_shallow_exact.initialize()
-convnet_shallow_exact.fit(
+convnet_deep_exact.initialize()
+convnet_deep_exact.fit(
     x_train=DataLoader(x_train, wrapper=tensortype),
     y_train=DataLoader(y_train, wrapper=tensortype),
     x_valid=DataLoader(x_test, wrapper=tensortype),
@@ -99,20 +99,19 @@ convnet_shallow_exact.fit(
     batch_size=128,
     verbose=1,
     learning_rate=0.01,
-    results_file='convnet_shallow_exact'
+    results_file='exp2_convnet_deep_exact'
 )
 
-convnet_deep = Sequential([
-    Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.uniform(low=-0.14, high=0.14, size=shp),
-           l2reg_lambda=l2),
-    ReluExact(),
-    Conv2D((3, 3, 32, 32), strides=1, padding=1, filter_init=lambda shp: np.random.uniform(low=-0.1, high=0.1, size=shp),
-           l2reg_lambda=l2),
-    ReluExact(),
-    AveragePooling2D(pool_size=(2, 2)),
-    Flatten(),
-    Dense(10, 1568*4, l2reg_lambda=l2),
-    Reveal(),
-    # SigmoidExact(),
-    SoftmaxStable()
-])
+convnet_deep_approx.initialize()
+convnet_deep_approx.fit(
+    x_train=DataLoader(x_train, wrapper=tensortype),
+    y_train=DataLoader(y_train, wrapper=tensortype),
+    x_valid=DataLoader(x_test, wrapper=tensortype),
+    y_valid=DataLoader(y_test, wrapper=tensortype),
+    loss=CrossEntropy(),
+    epochs=5,
+    batch_size=128,
+    verbose=1,
+    learning_rate=0.01,
+    results_file='exp2_convnet_deep_approx.csv'
+)
