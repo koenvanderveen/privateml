@@ -11,6 +11,9 @@ except ImportError:
     print('python setup.py build_ext --inplace\n')
     use_cython = False
 
+ROUNDS = 0
+COMMUNICATED_VALUES = 0
+
 
 class NativeTensor:
 
@@ -894,6 +897,10 @@ class PrivateEncodedTensor:
             a, b, ab = precomputed
             alpha = (x - a).reveal() # (PrivateEncodedTensor - PrivateFieldTensor).reveal() = PublicFieldTensor
             beta = (y - b).reveal()  # (PrivateEncodedTensor - PrivateFieldTensor).reveal() = PublicFieldTensor
+            ROUNDS+=1
+            COMMUNICATED_VALUES += np.prod(alpha.shape)
+            COMMUNICATED_VALUES += np.prod(beta.shape)
+
             z = alpha.dot(beta) + alpha.dot(b) + a.dot(beta) + ab
             # PublicFieldTensor.dot(PublicFieldTensor) = PublicFieldTensor
             # PublicFieldTensor.dot(PrivateFieldTensor) = PrivateFieldTensor
