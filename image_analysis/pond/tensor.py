@@ -884,7 +884,7 @@ class PrivateEncodedTensor:
     def __mul__(x, y):
         return x.mul(y)
 
-    def dot(x, y, precomputed=None):
+    def dot(x, y, precomputed=None, save_mask=True):
         y = wrap_if_needed(y)
         if isinstance(y, PublicEncodedTensor):
             assert x.shape[-1] == y.shape[0]
@@ -915,23 +915,23 @@ class PrivateEncodedTensor:
         if isinstance(y, PublicEncodedTensor): return x.mul(y.inv())
         raise TypeError("%s does not support %s" % (type(x), type(y)))
 
-    def matmul(x, y, precomputed=None):
-        y = wrap_if_needed(y)
-        if isinstance(y, PublicEncodedTensor):
-            shares0 = np.matmul(x.shares0, y.elements) % Q
-            shares1 = np.matmul(x.shares1, y.elements) % Q
-            return PrivateEncodedTensor.from_shares(shares0, shares1).truncate()
-        if isinstance(y, PrivateEncodedTensor):
-            if precomputed is None: precomputed = generate_matmul_triple(x.shape, y.shape)
-            a, b, ab = precomputed
-            alpha = (x - a).reveal()
-            beta = (y - b).reveal()
-            z = np.matmul(alpha, beta) + \
-                np.matmul(alpha, b) + \
-                np.matmul(a, beta) + \
-                ab
-            return PrivateEncodedTensor.from_shares(z.shares0, z.shares1).truncate()
-        raise TypeError("%s does not support %s" % (type(x), type(y)))
+    # def matmul(x, y, precomputed=None):
+    #     y = wrap_if_needed(y)
+    #     if isinstance(y, PublicEncodedTensor):
+    #         shares0 = np.matmul(x.shares0, y.elements) % Q
+    #         shares1 = np.matmul(x.shares1, y.elements) % Q
+    #         return PrivateEncodedTensor.from_shares(shares0, shares1).truncate()
+    #     if isinstance(y, PrivateEncodedTensor):
+    #         if precomputed is None: precomputed = generate_matmul_triple(x.shape, y.shape)
+    #         a, b, ab = precomputed
+    #         alpha = (x - a).reveal()
+    #         beta = (y - b).reveal()
+    #         z = np.matmul(alpha, beta) + \
+    #             np.matmul(alpha, b) + \
+    #             np.matmul(a, beta) + \
+    #             ab
+    #         return PrivateEncodedTensor.from_shares(z.shares0, z.shares1).truncate()
+    #     raise TypeError("%s does not support %s" % (type(x), type(y)))
 
     def __truediv__(x, y):
         return x.div(y)
