@@ -41,28 +41,3 @@ convnet_shallow_exact_private.fit(
     learning_rate=0.01,
     results_file='exp34_private'
 )
-
-
-tensortype = PublicEncodedTensor
-convnet_shallow_exact_public = Sequential([
-    Conv2D((3, 3, 1, 16), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
-    Relu(order=3),
-    AveragePooling2D(pool_size=(2, 2)),
-    Flatten(),
-    Dense(10, 3136),
-    Reveal(),
-    SoftmaxStable()
-])
-convnet_shallow_exact_public.initialize()
-convnet_shallow_exact_public.fit(
-    x_train=DataLoader(x_train, wrapper=tensortype),
-    y_train=DataLoader(y_train, wrapper=tensortype),
-    x_valid=DataLoader(x_test, wrapper=tensortype),
-    y_valid=DataLoader(y_test, wrapper=tensortype),
-    loss=CrossEntropy(),
-    epochs=1,
-    batch_size=128,
-    verbose=1,
-    learning_rate=0.01,
-    results_file='exp345_public'
-)

@@ -614,21 +614,10 @@ class Sequential(Model):
 
         start_time = time.time()
 
-<<<<<<< HEAD
         if results_file is not None:
-            results_file = 'results/' + results_file + '.csv'
-
-<<<<<<< HEAD
-        with open(results_file, 'w') as f:
-            f.write("type, epoch, batch_index, time, train_loss, train_acc, val_loss, val_acc\n")
-            for epoch in range(epochs):
-                epoch_start = time.time()
-=======
->>>>>>> 2ae0942d250ce93fdb51d4bfdde6138455af9821
-=======
-        if results_file:
             f = open('results/' + results_file + '.csv', 'w')
             f.write("type, epoch, batch_index, time, train_loss, train_acc, val_loss, val_acc\n")
+
         for epoch in range(epochs):
             epoch_start = time.time()
             if verbose >= 1:
@@ -649,7 +638,6 @@ class Sequential(Model):
                 d_y = loss.derive(y_pred, y_batch)
                 self.backward(d_y, learning_rate)
 
->>>>>>> experiments
                 if verbose >= 1:
                     if batch_index != 0 and (batch_index + 1) % eval_n_batches == 0:
                         # validation print
