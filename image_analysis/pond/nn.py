@@ -571,7 +571,7 @@ class Sequential(Model):
 
     @staticmethod
     def print_progress(batch_index, n_batches, batch_size, epoch_start, train_loss=None, train_acc=None,
-                       val_loss = None, val_acc=None):
+                       val_loss=None, val_acc=None):
         sys.stdout.write('\r')
         sys.stdout.flush()
         progress = (batch_index / n_batches)
@@ -591,11 +591,10 @@ class Sequential(Model):
                                             eta, train_loss, train_acc, val_loss, val_acc))
             # print(message.format((batch_index + 1) * batch_size, n_batches * batch_size, progress_bar, train_loss,
             #                      train_acc, val_loss, val_acc))
-
         sys.stdout.flush()
 
     def fit(self, x_train, y_train, x_valid=None, y_valid=None, loss=None, batch_size=32, epochs=1000,
-            learning_rate=.01, verbose=0, eval_n_batches=None):
+            learning_rate=.01, verbose=0, eval_n_batches=None, results_file=None):
 
         if not isinstance(x_train, DataLoader): x_train = DataLoader(x_train)
         if not isinstance(y_train, DataLoader): y_train = DataLoader(y_train)
@@ -608,37 +607,54 @@ class Sequential(Model):
         if eval_n_batches is None:
             eval_n_batches = n_batches
 
-        for epoch in range(epochs):
-            epoch_start = time.time()
-            if verbose >= 1:
-                print(datetime.now(), "Epoch {}/{}".format(epoch + 1, epochs))
+        start_time = time.time()
 
-            # Create batches on shuffled data
-            shuffle = np.random.permutation(x_train.data.shape[0])
-            batches = zip(x_train.batches(batch_size, shuffle_indices=shuffle),
-                          y_train.batches(batch_size, shuffle_indices=shuffle))
+        if results_file is not None:
+            results_file = 'results/' + results_file + '.csv'
 
-            for batch_index, (x_batch, y_batch) in enumerate(batches):
-                if verbose >= 2:
-                    print(datetime.now(), "Batch %s" % batch_index)
-
-                y_pred = self.forward(x_batch)
-                train_loss = loss.evaluate(y_pred, y_batch).unwrap()[0]
-                acc = np.mean(y_batch.unwrap().argmax(axis=1) == y_pred.unwrap().argmax(axis=1))
-                d_y = loss.derive(y_pred, y_batch)
-                self.backward(d_y, learning_rate)
-
+<<<<<<< HEAD
+        with open(results_file, 'w') as f:
+            f.write("type, epoch, batch_index, time, train_loss, train_acc, val_loss, val_acc\n")
+            for epoch in range(epochs):
+                epoch_start = time.time()
+=======
+>>>>>>> 2ae0942d250ce93fdb51d4bfdde6138455af9821
                 if verbose >= 1:
-                    if batch_index != 0 and (batch_index + 1) % eval_n_batches == 0:
-                        # validation print
-                        y_pred_val = self.predict(x_valid)
-                        val_loss = np.sum(loss.evaluate(y_pred_val, y_valid.all_data()).unwrap())
-                        val_acc = np.mean(y_valid.all_data().unwrap().argmax(axis=1) == y_pred_val.unwrap().argmax(axis=1))
-                        self.print_progress(batch_index, n_batches, batch_size, epoch_start, train_acc=acc, train_loss=train_loss,
-                                            val_loss=val_loss, val_acc=val_acc)
-                    else:
-                        # normal print
-                        self.print_progress(batch_index, n_batches, batch_size, epoch_start, train_acc=acc, train_loss=train_loss)
+                    print(datetime.now(), "Epoch {}/{}".format(epoch + 1, epochs))
+
+                # Create batches on shuffled data
+                shuffle = np.random.permutation(x_train.data.shape[0])
+                batches = zip(x_train.batches(batch_size, shuffle_indices=shuffle),
+                              y_train.batches(batch_size, shuffle_indices=shuffle))
+
+                for batch_index, (x_batch, y_batch) in enumerate(batches):
+                    if verbose >= 2:
+                        print(datetime.now(), "Batch %s" % batch_index)
+
+                    y_pred = self.forward(x_batch)
+                    train_loss = loss.evaluate(y_pred, y_batch).unwrap()[0]
+                    acc = np.mean(y_batch.unwrap().argmax(axis=1) == y_pred.unwrap().argmax(axis=1))
+                    d_y = loss.derive(y_pred, y_batch)
+                    self.backward(d_y, learning_rate)
+
+                    # print status
+                    if verbose >= 1:
+                        if batch_index != 0 and (batch_index + 1) % eval_n_batches == 0:
+                            # validation print
+                            y_pred_val = self.predict(x_valid)
+                            val_loss = np.sum(loss.evaluate(y_pred_val, y_valid.all_data()).unwrap())
+                            val_acc = np.mean(y_valid.all_data().unwrap().argmax(axis=1) == y_pred_val.unwrap().argmax(axis=1))
+                            self.print_progress(batch_index, n_batches, batch_size, epoch_start, train_acc=acc, train_loss=train_loss,
+                                                val_loss=val_loss, val_acc=val_acc)
+                            if results_file:
+                                time_passed = time.time() - start_time
+                                f.write("train, {}, {}, {}, {}, {}, {}, {}\n".format(epoch, batch_index, time_passed, train_loss, acc, val_loss, val_acc))
+                        else:
+                            # normal print
+                            self.print_progress(batch_index, n_batches, batch_size, epoch_start, train_acc=acc, train_loss=train_loss)
+                            if results_file:
+                                time_passed = time.time() - start_time
+                                f.write("train, {}, {}, {}, {}, {}, ,\n".format(epoch, batch_index, time_passed, train_loss, acc))
 
             # Newline after progressbar.
             print()
