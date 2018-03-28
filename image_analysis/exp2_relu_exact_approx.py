@@ -30,7 +30,7 @@ convnet_shallow_exact = Sequential([
 ])
 convnet_shallow_approx = Sequential([
     Conv2D((3, 3, 1, 16), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
-    ReluExact(),
+    Relu(order=3),
     AveragePooling2D(pool_size=(2, 2)),
     Flatten(),
     Dense(10, 3136),
@@ -50,9 +50,9 @@ convnet_deep_exact = Sequential([
 ])
 convnet_deep_approx = Sequential([
     Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.uniform(low=-0.14, high=0.14, size=shp)),
-    ReluExact(),
+    Relu(order=3),
     Conv2D((3, 3, 32, 32), strides=1, padding=1, filter_init=lambda shp: np.random.uniform(low=-0.1, high=0.1, size=shp)),
-    ReluExact(),
+    Relu(order=3),
     AveragePooling2D(pool_size=(2, 2)),
     Flatten(),
     Dense(10, 1568*4),
@@ -113,5 +113,5 @@ convnet_deep_approx.fit(
     batch_size=128,
     verbose=1,
     learning_rate=0.01,
-    results_file='exp2_convnet_deep_approx.csv'
+    results_file='exp2_convnet_deep_approx'
 )

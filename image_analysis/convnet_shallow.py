@@ -5,7 +5,6 @@ from pond.nn import Dense, ReluExact, Relu, Reveal, CrossEntropy, SoftmaxStable,
                     Sequential, DataLoader, Conv2D, AveragePooling2D, Flatten
 from keras.utils import to_categorical
 np.random.seed(42)
-import datetime
 
 # Read data.
 (x_train, y_train), (x_test, y_test) = keras.datasets.mnist.load_data()
@@ -38,9 +37,8 @@ convnet_shallow.fit(
     x_valid=DataLoader(x_test, wrapper=tensortype),
     y_valid=DataLoader(y_test, wrapper=tensortype),
     loss=CrossEntropy(),
-    epochs=5,
+    epochs=1,
     batch_size=128,
     verbose=1,
     learning_rate=0.01
 )
-

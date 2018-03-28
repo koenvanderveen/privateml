@@ -4,6 +4,9 @@ image_analysis/im2col/im2col_cython_float.c
 image_analysis/im2col/im2col_cython_object.c
 image_analysis/keras_mlp.py
 image_analysis/mlp.py
+image_analysis/nohup.out
+image_analysis/results
+
 
 
 .ipynb_checkpoints/
@@ -113,4 +116,4 @@ ENV/
 
 *.swp
 *.swo
-*.csv
+*.c
