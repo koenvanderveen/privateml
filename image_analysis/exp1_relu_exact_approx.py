@@ -1,8 +1,8 @@
 import keras
 import numpy as np
 from pond.tensor import NativeTensor
-from pond.nn import Dense, ReluExact, Relu, Reveal, CrossEntropy, SoftmaxStable,\
-                    Sequential, DataLoader, Conv2D, AveragePooling2D, Flatten
+from pond.nn import Dense, ReluExact, Relu, Reveal, CrossEntropy, SoftmaxStable, Sequential, DataLoader, Conv2D, \
+    AveragePooling2D, Flatten
 from keras.utils import to_categorical
 np.random.seed(42)
 
@@ -16,6 +16,7 @@ y_test = to_categorical(y_test, 10)
 _ = np.seterr(over='raise')
 _ = np.seterr(under='raise')
 _ = np.seterr(invalid='raise')
+
 
 tensortype = NativeTensor
 
@@ -71,7 +72,7 @@ convnet_shallow_exact.fit(
     batch_size=128,
     verbose=1,
     learning_rate=0.01,
-    results_file='exp2_convnet_shallow_exact'
+    results_file='exp1_convnet_shallow_exact'
 )
 
 convnet_shallow_approx.initialize()
@@ -85,7 +86,7 @@ convnet_shallow_approx.fit(
     batch_size=128,
     verbose=1,
     learning_rate=0.01,
-    results_file='exp2_convnet_shallow_approx'
+    results_file='exp1_convnet_shallow_approx'
 )
 
 convnet_deep_exact.initialize()
@@ -99,7 +100,7 @@ convnet_deep_exact.fit(
     batch_size=128,
     verbose=1,
     learning_rate=0.01,
-    results_file='exp2_convnet_deep_exact'
+    results_file='exp1_convnet_deep_exact'
 )
 
 convnet_deep_approx.initialize()
@@ -113,5 +114,5 @@ convnet_deep_approx.fit(
     batch_size=128,
     verbose=1,
     learning_rate=0.01,
-    results_file='exp2_convnet_deep_approx'
+    results_file='exp1_convnet_deep_approx'
 )

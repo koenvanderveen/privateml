@@ -1,8 +1,8 @@
 import keras
 import numpy as np
 from pond.tensor import NativeTensor, PublicEncodedTensor
-from pond.nn import Dense, ReluExact, Relu, Reveal, CrossEntropy, SoftmaxStable, \
-    Sequential, DataLoader, Conv2D, AveragePooling2D, Flatten
+from pond.nn import Dense, ReluExact, Reveal, CrossEntropy, SoftmaxStable, Sequential, DataLoader, Conv2D, \
+    AveragePooling2D, Flatten
 from keras.utils import to_categorical
 np.random.seed(42)
 
@@ -16,7 +16,6 @@ y_test = to_categorical(y_test, 10)
 _ = np.seterr(over='raise')
 _ = np.seterr(under='raise')
 _ = np.seterr(invalid='raise')
-
 
 
 tensortype = PublicEncodedTensor
@@ -41,7 +40,7 @@ convnet_shallow_exact_public.fit(
     batch_size=128,
     verbose=1,
     learning_rate=0.01,
-    results_file='exp1_convnet_shallow_exact_public'
+    results_file='exp2_convnet_shallow_exact_public'
 )
 
 tensortype = NativeTensor
@@ -65,5 +64,5 @@ convnet_shallow_exact_native.fit(
     batch_size=128,
     verbose=1,
     learning_rate=0.01,
-    results_file='exp1_convnet_shallow_exact_native'
+    results_file='exp2_convnet_shallow_exact_native'
 )
