@@ -1,6 +1,6 @@
 import keras
 import numpy as np
-from pond.tensor import NativeTensor, PublicEncodedTensor
+from pond.tensor import NativeTensor, PrivateEncodedTensor
 from pond.nn import Dense, ReluExact, Reveal, CrossEntropy, SoftmaxStable, Sequential, DataLoader, Conv2D, \
     AveragePooling2D, Flatten
 from keras.utils import to_categorical
@@ -18,7 +18,7 @@ _ = np.seterr(under='raise')
 _ = np.seterr(invalid='raise')
 
 
-tensortype = PublicEncodedTensor
+tensortype = PrivateEncodedTensor
 
 convnet_shallow_exact_public = Sequential([
     Conv2D((3, 3, 1, 16), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
@@ -36,33 +36,9 @@ convnet_shallow_exact_public.fit(
     x_valid=DataLoader(x_test, wrapper=tensortype),
     y_valid=DataLoader(y_test, wrapper=tensortype),
     loss=CrossEntropy(),
-    epochs=5,
+    epochs=1,
     batch_size=128,
     verbose=1,
     learning_rate=0.01,
-    results_file='exp2_convnet_shallow_exact_public'
-)
-
-tensortype = NativeTensor
-convnet_shallow_exact_native = Sequential([
-    Conv2D((3, 3, 1, 16), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
-    AveragePooling2D(pool_size=(2, 2)),
-    ReluExact(),
-    Flatten(),
-    Dense(10, 3136),
-    Reveal(),
-    SoftmaxStable()
-])
-convnet_shallow_exact_native.initialize()
-convnet_shallow_exact_native.fit(
-    x_train=DataLoader(x_train, wrapper=tensortype),
-    y_train=DataLoader(y_train, wrapper=tensortype),
-    x_valid=DataLoader(x_test, wrapper=tensortype),
-    y_valid=DataLoader(y_test, wrapper=tensortype),
-    loss=CrossEntropy(),
-    epochs=5,
-    batch_size=128,
-    verbose=1,
-    learning_rate=0.01,
-    results_file='exp2_convnet_shallow_exact_native'
+    results_file='exp3'
 )

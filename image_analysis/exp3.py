@@ -39,7 +39,7 @@ convnet_shallow_exact_private.fit(
     batch_size=128,
     verbose=1,
     learning_rate=0.01,
-    results_file='exp345_private'
+    results_file='exp34_private'
 )
 
 
