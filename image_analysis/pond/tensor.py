@@ -14,6 +14,9 @@ except ImportError as e:
     print('python setup.py build_ext --inplace\n')
     use_cython = False
 
+ROUNDS = 0
+COMMUNICATED_VALUES = 0
+
 
 class NativeTensor:
 
@@ -107,12 +110,12 @@ class NativeTensor:
         if isinstance(y, PrivateEncodedTensor): return PublicEncodedTensor.from_values(x.values).dot(y)
         raise TypeError("%s does not support %s" % (type(x), type(y)))
 
-    def matmul(x, y):
-        y = NativeTensor.wrap_if_needed(y)
-        if isinstance(y, NativeTensor): return NativeTensor(np.matmul(x.values, y.values))
-        if isinstance(y, PublicEncodedTensor): return PublicEncodedTensor.from_values(x.values).matmul(y)
-        if isinstance(y, PrivateEncodedTensor): return PublicEncodedTensor.from_values(x.values).matmul(y)
-        raise TypeError("%s does not support %s" % (type(x), type(y)))
+    # def matmul(x, y):
+    #     y = NativeTensor.wrap_if_needed(y)
+    #     if isinstance(y, NativeTensor): return NativeTensor(np.matmul(x.values, y.values))
+    #     if isinstance(y, PublicEncodedTensor): return PublicEncodedTensor.from_values(x.values).matmul(y)
+    #     if isinstance(y, PrivateEncodedTensor): return PublicEncodedTensor.from_values(x.values).matmul(y)
+    #     raise TypeError("%s does not support %s" % (type(x), type(y)))
 
     def div(x, y):
         y = NativeTensor.wrap_if_needed(y)
@@ -392,8 +395,8 @@ class PublicEncodedTensor:
         if isinstance(y, PublicEncodedTensor): return x.mul(y.inv())
         raise TypeError("%s does not support %s" % (type(x), type(y)))
 
-    def matmul(x, y):
-        return PublicEncodedTensor(np.matmul(x.elements, y.elements))
+    # def matmul(x, y):
+    #     return PublicEncodedTensor(np.matmul(x.elements, y.elements))
 
     def __div__(x, y):
         return x.div(y)
@@ -859,6 +862,7 @@ class PrivateEncodedTensor:
             x_broadcasted = PrivateEncodedTensor.from_shares(x_broadcasted0, x_broadcasted1)
             y_broadcasted = PrivateEncodedTensor.from_shares(y_broadcasted0, y_broadcasted1)
 
+
             if precomputed is None: precomputed = generate_mul_triple(x_broadcasted.shape)
             a, b, ab = precomputed
             assert x_broadcasted.shape == y_broadcasted.shape
@@ -866,6 +870,12 @@ class PrivateEncodedTensor:
             assert y_broadcasted.shape == b.shape
             alpha = (x_broadcasted - a).reveal()
             beta = (y_broadcasted - b).reveal()
+
+            global ROUNDS, COMMUNICATED_VALUES
+            ROUNDS+=1
+            COMMUNICATED_VALUES += np.prod(alpha.shape)
+            COMMUNICATED_VALUES += np.prod(beta.shape)
+
             z = alpha.mul(beta) + \
                 alpha.mul(b) + \
                 a.mul(beta) + \
@@ -900,6 +910,11 @@ class PrivateEncodedTensor:
             a, b, ab = precomputed
             alpha = (x - a).reveal() # (PrivateEncodedTensor - PrivateFieldTensor).reveal() = PublicFieldTensor
             beta = (y - b).reveal()  # (PrivateEncodedTensor - PrivateFieldTensor).reveal() = PublicFieldTensor
+            global ROUNDS, COMMUNICATED_VALUES
+            ROUNDS+=1
+            COMMUNICATED_VALUES += np.prod(alpha.shape)
+            COMMUNICATED_VALUES += np.prod(beta.shape)
+
             z = alpha.dot(beta) + alpha.dot(b) + a.dot(beta) + ab
             # PublicFieldTensor.dot(PublicFieldTensor) = PublicFieldTensor
             # PublicFieldTensor.dot(PrivateFieldTensor) = PrivateFieldTensor
@@ -915,23 +930,23 @@ class PrivateEncodedTensor:
         if isinstance(y, PublicEncodedTensor): return x.mul(y.inv())
         raise TypeError("%s does not support %s" % (type(x), type(y)))
 
-    def matmul(x, y, precomputed=None):
-        y = wrap_if_needed(y)
-        if isinstance(y, PublicEncodedTensor):
-            shares0 = np.matmul(x.shares0, y.elements) % Q
-            shares1 = np.matmul(x.shares1, y.elements) % Q
-            return PrivateEncodedTensor.from_shares(shares0, shares1).truncate()
-        if isinstance(y, PrivateEncodedTensor):
-            if precomputed is None: precomputed = generate_matmul_triple(x.shape, y.shape)
-            a, b, ab = precomputed
-            alpha = (x - a).reveal()
-            beta = (y - b).reveal()
-            z = np.matmul(alpha, beta) + \
-                np.matmul(alpha, b) + \
-                np.matmul(a, beta) + \
-                ab
-            return PrivateEncodedTensor.from_shares(z.shares0, z.shares1).truncate()
-        raise TypeError("%s does not support %s" % (type(x), type(y)))
+    # def matmul(x, y, precomputed=None):
+    #     y = wrap_if_needed(y)
+    #     if isinstance(y, PublicEncodedTensor):
+    #         shares0 = np.matmul(x.shares0, y.elements) % Q
+    #         shares1 = np.matmul(x.shares1, y.elements) % Q
+    #         return PrivateEncodedTensor.from_shares(shares0, shares1).truncate()
+    #     if isinstance(y, PrivateEncodedTensor):
+    #         if precomputed is None: precomputed = generate_matmul_triple(x.shape, y.shape)
+    #         a, b, ab = precomputed
+    #         alpha = (x - a).reveal()
+    #         beta = (y - b).reveal()
+    #         z = np.matmul(alpha, beta) + \
+    #             np.matmul(alpha, b) + \
+    #             np.matmul(a, beta) + \
+    #             ab
+    #         return PrivateEncodedTensor.from_shares(z.shares0, z.shares1).truncate()
+    #     raise TypeError("%s does not support %s" % (type(x), type(y)))
 
     def __truediv__(x, y):
         return x.div(y)
@@ -988,9 +1003,9 @@ class PrivateEncodedTensor:
 
     def col2im(x, imshape, field_height, field_width, padding, stride):
         if use_cython:
-            shares0 =col2im_cython(x.shares0, imshape[0], imshape[1], imshape[2], imshape[3],
+            shares0 =col2im_cython_object(x.shares0, imshape[0], imshape[1], imshape[2], imshape[3],
                                    field_height, field_width, padding, stride)
-            shares1 =col2im_cython(x.shares1, imshape[0], imshape[1], imshape[2], imshape[3],
+            shares1 =col2im_cython_object(x.shares1, imshape[0], imshape[1], imshape[2], imshape[3],
                                    field_height, field_width, padding, stride)
 
             return PrivateEncodedTensor.from_shares(shares0, shares1)
@@ -1026,6 +1041,11 @@ class PrivateEncodedTensor:
                 a, b, a_conv_b, a_col = precomputed          # PrivateFieldTensors
                 alpha = (x - a).reveal()
                 beta = (filters - b).reveal()
+
+                global ROUNDS, COMMUNICATED_VALUES
+                ROUNDS+=1
+                COMMUNICATED_VALUES += np.prod(alpha.shape)
+                COMMUNICATED_VALUES += np.prod(beta.shape)
 
                 alpha_col = alpha.im2col(h_filter, w_filter, padding, strides)
                 beta_col = beta.transpose(3, 2, 0, 1).reshape(n_filters, -1)
@@ -1066,6 +1086,11 @@ class PrivateEncodedTensor:
                 a, a_col, alpha_col = cache
                 a, b, a_convbw_b = generate_convbw_triple(a.shape, d_y_reshaped.shape, a=a, a_col=a_col)
                 beta = (d_y_reshaped - b).reveal()
+
+                global ROUNDS, COMMUNICATED_VALUES
+                ROUNDS+=1
+                # COMMUNICATED_VALUES += np.prod(alpha.shape)
+                COMMUNICATED_VALUES += np.prod(beta.shape)
 
                 alpha_convbw_beta = beta.dot(alpha_col.transpose())
                 alpha_convbw_b = b.dot(alpha_col.transpose())

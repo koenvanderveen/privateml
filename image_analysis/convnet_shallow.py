@@ -38,7 +38,7 @@ convnet_shallow.fit(
     y_valid=DataLoader(y_test, wrapper=tensortype),
     loss=CrossEntropy(),
     epochs=1,
-    batch_size=256,
+    batch_size=128,
     verbose=1,
     learning_rate=0.01
 )
