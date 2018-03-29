@@ -4,7 +4,7 @@ image_analysis/im2col/im2col_cython_float.c
 image_analysis/im2col/im2col_cython_object.c
 image_analysis/keras_mlp.py
 image_analysis/mlp.py
-image_anayysis/results
+image_anaysis/results
 
 
 .ipynb_checkpoints/

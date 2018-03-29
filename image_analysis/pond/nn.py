@@ -38,7 +38,7 @@ class Dense(Layer):
         if self.bias is None:
             self.bias = self.initializer(np.zeros((1, self.num_nodes)))
 
-        y = x.dot(self.weights) + self.bias
+        y = x.dot(self.weights, save_mask=True) + self.bias
         # cache result for backward pass
         self.cache = x
         return y
@@ -200,18 +200,13 @@ class Relu(Layer):
             x[..., i] = x[..., i] * x[..., i+1]
 
         y = x.dot(self.coeff)
-        self.cache = x[:, :, :, :, 1:]
+        self.cache = x[..., 1:]
         return y
 
     def backward(self, d_y, learning_rate):
         x = self.cache
         d_x = d_y * x.dot(self.coeff_der)
         return d_x
-
-    def relu_der(self, x):
-        x_powers = np.array([x ** i for i in range(self.n_coeff - 1)][::-1]).T
-        y = x_powers.dot(self.coeff_der)
-        return y
 
     @staticmethod
     def compute_coefficients_relu(order, domain, n):
@@ -312,8 +307,9 @@ class Conv2D():
             dx = None
 
         # weight update and regularization
-        dw = x.conv2d_bw(d_y, self.filters.shape, self.cache2)
-        if self.l2reg_lambda > 0: dw = dw + self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
+        dw = x.conv2d_bw(d_y, self.cache2, self.filters.shape, self.padding, self.strides)
+        if self.l2reg_lambda > 0:
+            dw = dw + self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
         self.filters = ((dw * learning_rate).neg() + self.filters)
 
         # biases
@@ -464,7 +460,7 @@ class AveragePooling2D_NHWC():
         x = self.cache
         d_y_expanded = d_y.repeat(self.pool_size[0], axis=1)
         d_y_expanded = d_y_expanded.repeat(self.pool_size[1], axis=2)
-        d_x = d_y_expanded * x / self.pool_area
+        d_x = d_y_expanded / self.pool_area
         return d_x
 
 
