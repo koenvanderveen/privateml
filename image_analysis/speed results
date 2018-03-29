@@ -1,9 +1,0 @@
-Convolutions naive with private tensor:
-
-forward: 5.30 seconds
-forward + backward: 64.55 seconds
-
-Convolutions im2col with private tensor (no optimized communication) :
-
-forward: 1.45 seconds
-forward + backward: 14.94 seconds

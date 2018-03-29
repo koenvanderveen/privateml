@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from functools import reduce
 from pond.tensor import NativeTensor, PublicEncodedTensor
 # from im2col.im2col import im2col_indices, col2im_indices
+import pond.tensor as t
 import math
 import time
 
@@ -318,6 +319,107 @@ class Conv2D():
 
         return dx
 
+class ConvAveragePooling2D():
+    def __init__(self, fshape, strides=1, padding=0, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp),
+                 l2reg_lambda=0.0, pool_size=(2,2), pool_strides=None, channels_first=True):
+        """ 2 Dimensional convolutional layer followed by average pooling layer
+            , expects NCHW data format and is optimized for communication
+            fshape: tuple of rank 4
+            strides: int with stride size
+            filter init: lambda function with shape parameter
+            Example: Conv2D((4, 4, 1, 20), strides=2, filter_init=lambda shp: np.random.normal(scale=0.01,
+            size=shp))
+        """
+
+        self.fshape = fshape
+        self.strides = strides
+        self.padding = padding
+        self.filter_init = filter_init
+        self.l2reg_lambda = l2reg_lambda
+        self.cache = None
+        self.cache2 = None
+        self.cached_input_shape = None
+        self.initializer = None
+
+        self.pool_size = pool_size
+        self.pool_area = pool_size[0] * pool_size[1]
+        if pool_strides == None:
+            self.pool_strides = pool_size[0]
+        else:
+            self.pool_strides = pool_strides
+
+        assert channels_first
+
+    def initialize(self, model=None):
+        # weights
+        self.filters = None
+        # init bias based on x
+        self.bias = None
+        self.model = model
+
+    def forward(self, x):
+
+        self.initializer = type(x)
+        self.cached_input_shape = x.shape
+        self.cache = x
+
+        # conv
+        if self.filters is None:
+            self.filters = self.initializer(self.filter_init(self.fshape))
+
+        out, self.cache2 = x.conv2d(self.filters, self.strides, self.padding)
+        if self.bias is None:
+            self.bias = self.initializer(np.zeros(out.shape[1:]))
+        x_pool = out + self.bias
+
+        # pool
+        s = (x_pool.shape[2] - self.pool_size[0]) // self.pool_strides + 1
+        pooled = self.initializer(np.zeros((x_pool.shape[0], x_pool.shape[1], s, s)))
+        for j in range(s):
+            for i in range(s):
+                pooled[:, :, j, i] = x_pool[:, :, j * self.pool_strides:j * self.pool_strides + self.pool_size[0],
+                                            i * self.pool_strides:i * self.pool_strides + self.pool_size[1]].sum(axis=(2, 3))
+
+        pooled = pooled / self.pool_area
+        return pooled
+
+    def backward(self, d_y, learning_rate):
+        # copy, because d_y is also used
+        d_y_expanded = d_y.copy().repeat(self.pool_size[0], axis=2)
+        d_y_expanded = d_y_expanded.repeat(self.pool_size[1], axis=3)
+        d_y_conv = d_y_expanded / self.pool_area
+
+        # cache
+        x = self.cache
+        h_filter, w_filter, d_filter, n_filter = self.filters.shape
+
+        # delta (do not compute if this layer is the first layer)
+        if self.model.layers.index(self) != 0:
+
+            W_reshape = self.filters.reshape(n_filter, -1)
+            dout_reshaped = d_y_conv.transpose(1, 2, 3, 0).reshape(n_filter, -1)
+            dx_col = W_reshape.transpose().dot(dout_reshaped)
+
+            dx = dx_col.col2im(imshape=self.cached_input_shape, field_height=h_filter, field_width=w_filter,
+                               padding=self.padding, stride=self.strides)
+        else:
+            dx = None
+
+        # weight update and regularization
+        dw = x.convavgpool_bw(d_y, self.cache2, self.filters.shape, self.padding, self.strides,
+                              self.pool_size, self.pool_strides)
+
+        if self.l2reg_lambda > 0:
+            dw = dw + self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
+        self.filters = ((dw * learning_rate).neg() + self.filters)
+
+        # biases
+        d_bias = d_y_conv.sum(axis=0)
+        self.bias = ((d_bias * learning_rate).neg() + self.bias)
+
+        return dx
+
+
 
 class Conv2DNaive():
 
@@ -413,11 +515,9 @@ class AveragePooling2D():
                                        i * self.strides:i * self.strides + self.pool_size[1]].sum(axis=(2, 3))
 
         pooled = pooled / self.pool_area
-        self.cache = x
         return pooled
 
     def backward(self, d_y, learning_rate):
-        x = self.cache
         d_y_expanded = d_y.repeat(self.pool_size[0], axis=2)
         d_y_expanded = d_y_expanded.repeat(self.pool_size[1], axis=3)
         d_x = d_y_expanded / self.pool_area
@@ -553,17 +653,23 @@ class Sequential(Model):
     def initialize(self):
         for layer in self.layers:
             layer.initialize()
-            if isinstance(layer, Conv2D):
+            if isinstance(layer, Conv2D) or isinstance(layer, ConvAveragePooling2D):
                 layer.initialize(self)
 
     def forward(self, x):
         for layer in self.layers:
             x = layer.forward(x)
+            print(layer.__class__.__name__)
+            print()
+            print(t.COMMUNICATED_VALUES)
         return x
 
     def backward(self, d_y, learning_rate):
         for layer in reversed(self.layers):
             d_y = layer.backward(d_y, learning_rate)
+            print(layer.__class__.__name__)
+            print()
+            print(t.COMMUNICATED_VALUES)
 
     @staticmethod
     def print_progress(batch_index, n_batches, batch_size, epoch_start, train_loss=None, train_acc=None,
