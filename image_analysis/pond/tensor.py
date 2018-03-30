@@ -939,7 +939,7 @@ class PrivateEncodedTensor:
     def __mul__(x, y):
         return x.mul(y)
 
-    def dot(x, y, precomputed=None, save_mask=True):
+    def dot(x, y, precomputed=None, reuse_mask=REUSE_MASK):
         y = wrap_if_needed(y)
         if isinstance(y, PublicEncodedTensor):
             assert x.shape[-1] == y.shape[0]
@@ -952,12 +952,13 @@ class PrivateEncodedTensor:
             o = y.shape[1]
             assert n == y.shape[0]
             a, b, alpha, beta = None, None, None, None
-            if x.mask is not None:
-                a = x.mask
-                alpha = x.masked
-            if y.mask is not None:
-                b = y.mask
-                beta = y.masked
+            if reuse_mask:
+                if x.mask is not None:
+                    a = x.mask
+                    alpha = x.masked
+                if y.mask is not None:
+                    b = y.mask
+                    beta = y.masked
 
             if precomputed is None: precomputed = generate_dot_triple(m, n, o, a, b)
             a, b, ab = precomputed
@@ -975,7 +976,7 @@ class PrivateEncodedTensor:
             # PublicFieldTensor + PrivateFieldTensor + PrivateFieldTensor + PrivateFieldTensor = PrivateFieldTensor
 
             # cache masks
-            if save_mask:
+            if reuse_mask:
                 x.mask = a
                 x.masked = alpha
                 if isinstance(y, PrivateEncodedTensor):

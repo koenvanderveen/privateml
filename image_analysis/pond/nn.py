@@ -34,12 +34,13 @@ class Dense(Layer):
 
     def forward(self, x):
         self.initializer = type(x)
+        print(x.shape)
         if self.weights is None:
             self.weights = self.initializer(np.random.randn(self.num_features, self.num_nodes) * self.initial_scale)
         if self.bias is None:
             self.bias = self.initializer(np.zeros((1, self.num_nodes)))
 
-        y = x.dot(self.weights, save_mask=True) + self.bias
+        y = x.dot(self.weights) + self.bias
         # cache result for backward pass
         self.cache = x
         return y
@@ -657,21 +658,23 @@ class Sequential(Model):
                 layer.initialize(self)
 
     def forward(self, x):
+        # prev = 0
         for layer in self.layers:
             x = layer.forward(x)
-            print(layer.__class__.__name__)
-            print()
-            print(t.COMMUNICATED_VALUES)
+            # print(layer.__class__.__name__)
+            # print()
+            # print(t.COMMUNICATED_VALUES - prev)
+            # prev = t.COMMUNICATED_VALUES
         return x
 
     def backward(self, d_y, learning_rate):
+        # prev = t.COMMUNICATED_VALUES
         for layer in reversed(self.layers):
             d_y = layer.backward(d_y, learning_rate)
-            # print()
             # print(layer.__class__.__name__)
             # print()
-            # print(t.COMMUNICATED_VALUES)
-            # print(t.ROUNDS)
+            # print(t.COMMUNICATED_VALUES - prev)
+            # prev = t.COMMUNICATED_VALUES
 
     @staticmethod
     def print_progress(batch_index, n_batches, batch_size, epoch_start, train_loss=None, train_acc=None,
