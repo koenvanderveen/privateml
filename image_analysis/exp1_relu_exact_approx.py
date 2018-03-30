@@ -46,7 +46,7 @@ convnet_deep_exact = Sequential([
     AveragePooling2D(pool_size=(2, 2)),
     ReluExact(),
     Flatten(),
-    Dense(10, 1568*4),
+    Dense(10, 1568),
     Reveal(),
     SoftmaxStable()
 ])
@@ -58,7 +58,7 @@ convnet_deep_approx = Sequential([
     AveragePooling2D(pool_size=(2, 2)),
     Relu(order=3),
     Flatten(),
-    Dense(10, 1568*4),
+    Dense(10, 1568),
     Reveal(),
     SoftmaxStable()
 ])

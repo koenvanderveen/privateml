@@ -1,7 +1,7 @@
 import keras
 import numpy as np
 from pond.tensor import PublicEncodedTensor
-from pond.nn import Dense, ReluExact, Reveal, CrossEntropy, SoftmaxStable, Sequential, DataLoader, Conv2D, \
+from pond.nn import Dense, ReluExact, Relu, Reveal, CrossEntropy, SoftmaxStable, Sequential, DataLoader, Conv2D, \
     AveragePooling2D, Flatten
 from keras.utils import to_categorical
 np.random.seed(42)
@@ -19,7 +19,6 @@ _ = np.seterr(invalid='raise')
 
 
 tensortype = PublicEncodedTensor
-
 convnet_shallow_exact_public = Sequential([
     Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
     AveragePooling2D(pool_size=(2, 2)),
@@ -40,5 +39,29 @@ convnet_shallow_exact_public.fit(
     batch_size=128,
     verbose=1,
     learning_rate=0.01,
-    results_file='exp2'
+    results_file='exp2_relu_exact'
+)
+
+tensortype = PublicEncodedTensor
+convnet_shallow_exact_public = Sequential([
+    Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
+    AveragePooling2D(pool_size=(2, 2)),
+    Relu(order=3),
+    Flatten(),
+    Dense(10, 6272),
+    Reveal(),
+    SoftmaxStable()
+])
+convnet_shallow_exact_public.initialize()
+convnet_shallow_exact_public.fit(
+    x_train=DataLoader(x_train, wrapper=tensortype),
+    y_train=DataLoader(y_train, wrapper=tensortype),
+    x_valid=DataLoader(x_test, wrapper=tensortype),
+    y_valid=DataLoader(y_test, wrapper=tensortype),
+    loss=CrossEntropy(),
+    epochs=1,
+    batch_size=128,
+    verbose=1,
+    learning_rate=0.01,
+    results_file='exp2_relu_approx'
 )
