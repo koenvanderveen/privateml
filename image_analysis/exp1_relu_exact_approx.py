@@ -22,8 +22,8 @@ tensortype = NativeTensor
 
 convnet_shallow_exact = Sequential([
     Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
-    ReluExact(),
     AveragePooling2D(pool_size=(2, 2)),
+    ReluExact(),
     Flatten(),
     Dense(10, 3136),
     Reveal(),
@@ -31,8 +31,8 @@ convnet_shallow_exact = Sequential([
 ])
 convnet_shallow_approx = Sequential([
     Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
-    Relu(order=3),
     AveragePooling2D(pool_size=(2, 2)),
+    Relu(order=3),
     Flatten(),
     Dense(10, 3136),
     Reveal(),
@@ -40,10 +40,11 @@ convnet_shallow_approx = Sequential([
 ])
 convnet_deep_exact = Sequential([
     Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.uniform(low=-0.14, high=0.14, size=shp)),
+    AveragePooling2D(pool_size=(2, 2)),
     ReluExact(),
     Conv2D((3, 3, 32, 32), strides=1, padding=1, filter_init=lambda shp: np.random.uniform(low=-0.1, high=0.1, size=shp)),
-    ReluExact(),
     AveragePooling2D(pool_size=(2, 2)),
+    ReluExact(),
     Flatten(),
     Dense(10, 1568*4),
     Reveal(),
@@ -51,10 +52,11 @@ convnet_deep_exact = Sequential([
 ])
 convnet_deep_approx = Sequential([
     Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.uniform(low=-0.14, high=0.14, size=shp)),
+    AveragePooling2D(pool_size=(2, 2)),
     Relu(order=3),
     Conv2D((3, 3, 32, 32), strides=1, padding=1, filter_init=lambda shp: np.random.uniform(low=-0.1, high=0.1, size=shp)),
-    Relu(order=3),
     AveragePooling2D(pool_size=(2, 2)),
+    Relu(order=3),
     Flatten(),
     Dense(10, 1568*4),
     Reveal(),
