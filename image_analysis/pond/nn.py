@@ -32,7 +32,6 @@ class Dense(Layer):
 
     def forward(self, x):
         self.initializer = type(x)
-        print(x.shape)
         if self.weights is None:
             self.weights = self.initializer(np.random.randn(self.num_features, self.num_nodes) * self.initial_scale)
         if self.bias is None:
@@ -659,7 +658,7 @@ class Sequential(Model):
         prev = 0
         for layer in self.layers:
             x = layer.forward(x)
-            if isistance(x, PrivateEncodedTensor):
+            if isinstance(x, PrivateEncodedTensor):
                 print(layer.__class__.__name__, t.COMMUNICATED_VALUES - prev)
                 prev = t.COMMUNICATED_VALUES
         return x
@@ -668,7 +667,7 @@ class Sequential(Model):
         prev = t.COMMUNICATED_VALUES
         for layer in reversed(self.layers):
             d_y = layer.backward(d_y, learning_rate)
-            if isistance(x, PrivateEncodedTensor):
+            if isinstance(d_y, PrivateEncodedTensor):
                 print(layer.__class__.__name__, t.COMMUNICATED_VALUES - prev)
                 prev = t.COMMUNICATED_VALUES
 
@@ -713,6 +712,8 @@ class Sequential(Model):
         if results_file is not None:
             f = open('results/' + results_file + '.csv', 'w')
             f.write("type, epoch, batch_index, time, train_loss, train_acc, val_loss, val_acc\n")
+
+        start_time = time.time()
 
         for epoch in range(epochs):
             epoch_start = time.time()

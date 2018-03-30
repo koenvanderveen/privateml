@@ -1,6 +1,6 @@
 import keras
 import numpy as np
-from pond.tensor import NativeTensor, PrivateEncodedTensor
+from pond.tensor import PublicEncodedTensor
 from pond.nn import Dense, ReluExact, Reveal, CrossEntropy, SoftmaxStable, Sequential, DataLoader, Conv2D, \
     AveragePooling2D, Flatten
 from keras.utils import to_categorical
@@ -18,14 +18,14 @@ _ = np.seterr(under='raise')
 _ = np.seterr(invalid='raise')
 
 
-tensortype = PrivateEncodedTensor
+tensortype = PublicEncodedTensor
 
 convnet_shallow_exact_public = Sequential([
     Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
     AveragePooling2D(pool_size=(2, 2)),
     ReluExact(),
     Flatten(),
-    Dense(10, 3136),
+    Dense(10, 6272),
     Reveal(),
     SoftmaxStable()
 ])
