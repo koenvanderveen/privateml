@@ -143,6 +143,9 @@ class NativeTensor:
             return NativeTensor(x.values.transpose())
         else:
             return NativeTensor(x.values.transpose(axes))
+        
+    def copy(x):
+        return NativeTensor(x.values)
 
     def neg(x):
         return NativeTensor(0 - x.values)
@@ -219,7 +222,7 @@ class NativeTensor:
         out = out.transpose(3, 0, 1, 2)
         return out, X_col
 
-    def conv2d_bw(x, d_y, filter_shape, cached_col):
+    def conv2d_bw(x, d_y, cached_col, filter_shape, **kwargs):
         if isinstance(d_y, NativeTensor) or isinstance(d_y, PublicEncodedTensor):
             assert cached_col is not None
             h_filter, w_filter, d_filter, n_filter = filter_shape
@@ -473,7 +476,7 @@ class PublicEncodedTensor:
         return out, X_col
 
 
-    def conv2d_bw(x, d_y, filter_shape, cached_col):
+    def conv2d_bw(x, d_y, cached_col, filter_shape, **kwargs):
         if isinstance(d_y, NativeTensor) or isinstance(d_y, PublicEncodedTensor):
             assert cached_col is not None
             h_filter, w_filter, d_filter, n_filter = filter_shape

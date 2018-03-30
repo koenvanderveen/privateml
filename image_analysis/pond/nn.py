@@ -2,7 +2,7 @@ import numpy as np
 import sys
 from datetime import datetime, timedelta
 from functools import reduce
-from pond.tensor import NativeTensor, PublicEncodedTensor
+from pond.tensor import NativeTensor, PublicEncodedTensor, PrivateEncodedTensor
 # from im2col.im2col import im2col_indices, col2im_indices
 import pond.tensor as t
 import math
@@ -309,7 +309,7 @@ class Conv2D():
             dx = None
 
         # weight update and regularization
-        dw = x.conv2d_bw(d_y, self.cache2, self.filters.shape, self.padding, self.strides)
+        dw = x.conv2d_bw(d_y, self.cache2, self.filters.shape, padding=self.padding, strides=self.strides)
         if self.l2reg_lambda > 0:
             dw = dw + self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
         self.filters = ((dw * learning_rate).neg() + self.filters)
@@ -658,23 +658,21 @@ class Sequential(Model):
                 layer.initialize(self)
 
     def forward(self, x):
-        # prev = 0
+        prev = 0
         for layer in self.layers:
             x = layer.forward(x)
-            # print(layer.__class__.__name__)
-            # print()
-            # print(t.COMMUNICATED_VALUES - prev)
-            # prev = t.COMMUNICATED_VALUES
+            if isistance(x, PrivateEncodedTensor):
+                print(layer.__class__.__name__, t.COMMUNICATED_VALUES - prev)
+                prev = t.COMMUNICATED_VALUES
         return x
 
     def backward(self, d_y, learning_rate):
-        # prev = t.COMMUNICATED_VALUES
+        prev = t.COMMUNICATED_VALUES
         for layer in reversed(self.layers):
             d_y = layer.backward(d_y, learning_rate)
-            # print(layer.__class__.__name__)
-            # print()
-            # print(t.COMMUNICATED_VALUES - prev)
-            # prev = t.COMMUNICATED_VALUES
+            if isistance(x, PrivateEncodedTensor):
+                print(layer.__class__.__name__, t.COMMUNICATED_VALUES - prev)
+                prev = t.COMMUNICATED_VALUES
 
     @staticmethod
     def print_progress(batch_index, n_batches, batch_size, epoch_start, train_loss=None, train_acc=None,
