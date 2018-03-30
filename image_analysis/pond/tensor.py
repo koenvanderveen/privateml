@@ -1151,17 +1151,15 @@ class PrivateEncodedTensor:
                     a, b, a_convbw_b = generate_convbw_triple(a.shape, d_y_reshaped.shape, a=a, a_col=a_col)
                     beta = (d_y_reshaped - b).reveal()
 
-                global ROUNDS, COMMUNICATED_VALUES
-                ROUNDS+=1
-                # COMMUNICATED_VALUES += np.prod(alpha.shape)
-                COMMUNICATED_VALUES += np.prod(beta.shape)
+                    global ROUNDS, COMMUNICATED_VALUES
+                    ROUNDS+=1
+                    COMMUNICATED_VALUES += np.prod(beta.shape)
 
-                alpha_convbw_beta = beta.dot(alpha_col.transpose())
-                alpha_convbw_b = b.dot(alpha_col.transpose())
-                a_convbw_beta = beta.dot(a_col.transpose())
+                    alpha_convbw_beta = beta.dot(alpha_col.transpose())
+                    alpha_convbw_b = b.dot(alpha_col.transpose())
+                    a_convbw_beta = beta.dot(a_col.transpose())
 
                     z = (alpha_convbw_beta + alpha_convbw_b + a_convbw_beta + a_convbw_b).reshape(filter_shape)
-                    return PrivateEncodedTensor.from_shares(z.shares0, z.shares1).truncate()
 
                 else:
                     a, b, a_convbw_b = generate_convbw_triple(x.shape, d_y_reshaped.shape)
