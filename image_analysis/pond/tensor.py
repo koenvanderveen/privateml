@@ -256,6 +256,7 @@ assert PRECISION_INTEGRAL + 2 * PRECISION_FRACTIONAL < log(Q) / log(BASE)
 COMMUNICATION_ROUNDS = 0
 COMMUNICATED_VALUES = 0
 USE_SPECIALIZED_TRIPLE=True
+REUSE_MASK=True
 
 def encode(rationals):
     # return (rationals * BASE ** PRECISION_FRACTIONAL).astype('int').astype(DTYPE) % Q
@@ -935,7 +936,7 @@ class PrivateEncodedTensor:
     def __mul__(x, y):
         return x.mul(y)
 
-    def dot(x, y, precomputed=None, save_mask=False):
+    def dot(x, y, precomputed=None, save_mask=True):
         y = wrap_if_needed(y)
         if isinstance(y, PublicEncodedTensor):
             assert x.shape[-1] == y.shape[0]
@@ -1108,7 +1109,7 @@ class PrivateEncodedTensor:
 
 
     def conv2d_bw(x, d_y, cache, filter_shape, padding=None, strides=None, use_specialized_triple=USE_SPECIALIZED_TRIPLE,
-                  reuse_mask=True, precomputed=None):
+                  reuse_mask=REUSE_MASK, precomputed=None):
 
         h_filter, w_filter, d_filter, n_filter = filter_shape
         d_y_reshaped = d_y.transpose(1, 2, 3, 0).reshape(n_filter, -1)
@@ -1155,7 +1156,7 @@ class PrivateEncodedTensor:
 
 
     def convavgpool_bw(x, d_y, cache, filter_shape, padding=None, strides=None, pool_size=None, pool_strides=None,
-                       use_specialized_triple=USE_SPECIALIZED_TRIPLE, reuse_mask=True, precomputed=None):
+                       use_specialized_triple=USE_SPECIALIZED_TRIPLE, reuse_mask=REUSE_MASK, precomputed=None):
         h_filter, w_filter, d_filter, n_filter = filter_shape
         pool_area = pool_size[0] * pool_size[1]
 
@@ -1169,9 +1170,10 @@ class PrivateEncodedTensor:
             dw = dw.reshape(filter_shape)
             return dw
         if isinstance(d_y, PrivateEncodedTensor):
-            # this layer is used to optimeze communication performance
+            # this layer is used to optimize communication performance
             assert use_specialized_triple and reuse_mask
             assert pool_size[0] == pool_strides and pool_size[1] == pool_strides
+
             a, a_col, alpha_col = x.mask, x.mask_transformed, x.masked_transformed
             a, b, a_conv_pool_bw_b, b_expanded = generate_conv_pool_bw_triple(a.shape, d_y.shape, pool_size=pool_size,
                                                                               n_filter=n_filter, a=a, a_col=a_col)
