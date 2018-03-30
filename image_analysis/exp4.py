@@ -21,11 +21,11 @@ _ = np.seterr(invalid='raise')
 tensortype = PrivateEncodedTensor
 
 convnet_shallow = Sequential([
-    ConvAveragePooling2D((3, 3, 1, 16), strides=1, padding=1, pool_size=(2, 2)),
+    ConvAveragePooling2D((3, 3, 1, 32), strides=1, padding=1, pool_size=(2, 2)),
     Relu(order=3),
     # ReluExact(),
     Flatten(),
-    Dense(10, 3136),
+    Dense(10, 6272),
     Reveal(),
     SoftmaxStable()
 ])
