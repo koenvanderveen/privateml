@@ -21,7 +21,7 @@ _ = np.seterr(invalid='raise')
 tensortype = NativeTensor
 
 convnet_shallow_exact = Sequential([
-    Conv2D((3, 3, 1, 16), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
+    Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
     ReluExact(),
     AveragePooling2D(pool_size=(2, 2)),
     Flatten(),
@@ -30,7 +30,7 @@ convnet_shallow_exact = Sequential([
     SoftmaxStable()
 ])
 convnet_shallow_approx = Sequential([
-    Conv2D((3, 3, 1, 16), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
+    Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
     Relu(order=3),
     AveragePooling2D(pool_size=(2, 2)),
     Flatten(),

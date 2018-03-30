@@ -40,5 +40,5 @@ convnet_shallow_exact_public.fit(
     batch_size=128,
     verbose=1,
     learning_rate=0.01,
-    results_file='exp3'
+    results_file='exp2'
 )
