@@ -7,8 +7,6 @@ image_analysis/mlp.py
 image_analysis/nohup.out
 image_analysis/results
 
-
-
 .ipynb_checkpoints/
 __pycache__/
 **/env/

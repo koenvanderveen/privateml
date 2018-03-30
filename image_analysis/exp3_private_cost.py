@@ -20,11 +20,11 @@ _ = np.seterr(invalid='raise')
 
 tensortype = PrivateEncodedTensor
 convnet_shallow_exact_private = Sequential([
-    Conv2D((3, 3, 1, 16), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
+    Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
     Relu(order=3),
     AveragePooling2D(pool_size=(2, 2)),
     Flatten(),
-    Dense(10, 3136),
+    Dense(10, 6272),
     Reveal(),
     SoftmaxStable()
 ])
