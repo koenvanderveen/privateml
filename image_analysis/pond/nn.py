@@ -2,8 +2,7 @@ import numpy as np
 import sys
 from datetime import datetime, timedelta
 from functools import reduce
-from pond.tensor import NativeTensor, PublicEncodedTensor, PrivateEncodedTensor
-# from im2col.im2col import im2col_indices, col2im_indices
+from pond.tensor import NativeTensor, PublicEncodedTensor, PrivateEncodedTensor, stack
 import pond.tensor as t
 import math
 import time
@@ -34,7 +33,6 @@ class Dense(Layer):
 
     def forward(self, x):
         self.initializer = type(x)
-        print(x.shape)
         if self.weights is None:
             self.weights = self.initializer(np.random.randn(self.num_features, self.num_nodes) * self.initial_scale)
         if self.bias is None:
@@ -185,29 +183,38 @@ class Relu(Layer):
     def __init__(self, order=7, domain=(-1, 1), n=1000):
         self.cache = None
         self.n_coeff = order + 1
+        self.order = order
         self.coeff = NativeTensor(self.compute_coefficients_relu(order, domain, n))
         self.coeff_der = (self.coeff * NativeTensor(list(range(self.n_coeff))[::-1]))[:-1]
         self.initializer = None
+        assert order > 2
 
     def initialize(self):
         pass
 
     def forward(self, x):
-        n_dims = len(x.shape)
-        x.expand_dims(axis=n_dims).repeat(self.n_coeff, axis=n_dims)
         self.initializer = type(x)
 
-        x[..., self.n_coeff-1] = self.initializer(1)
-        for i in range(self.n_coeff - 2)[::-1]:
-            x[..., i] = x[..., i] * x[..., i+1]
+        n_dims = len(x.shape)
 
-        y = x.dot(self.coeff)
-        self.cache = x[..., 1:]
+        powers = [x, x.square()]
+        for i in range(self.order - 2):
+            powers.append(x * powers[-1])
+
+        # stack list into tensor
+        forward_powers = stack(powers).flip(axis=n_dims)
+        y = forward_powers.dot(self.coeff[:-1]) + x * self.coeff[-1]
+
+        # cache all powers except the last
+        self.cache = stack(powers[:-1]).flip(axis=n_dims)
         return y
 
     def backward(self, d_y, learning_rate):
-        x = self.cache
-        d_x = d_y * x.dot(self.coeff_der)
+        # the powers of the forward phase: x^1 ...x^order-1
+        powers = self.cache
+        c = d_y * self.coeff_der[-1]
+        d_y.expand_dims(axis=-1)
+        d_x = (d_y * powers).dot(self.coeff_der[:-1]) + c
         return d_x
 
     @staticmethod
@@ -385,25 +392,18 @@ class ConvAveragePooling2D():
         return pooled
 
     def backward(self, d_y, learning_rate):
-        # copy, because d_y is also used
         d_y_expanded = d_y.copy().repeat(self.pool_size[0], axis=2)
         d_y_expanded = d_y_expanded.repeat(self.pool_size[1], axis=3)
         d_y_conv = d_y_expanded / self.pool_area
-
         # cache
         x = self.cache
-        h_filter, w_filter, d_filter, n_filter = self.filters.shape
 
-        # delta (do not compute if this layer is the first layer)
         if self.model.layers.index(self) != 0:
-
-            W_reshape = self.filters.reshape(n_filter, -1)
-            dout_reshaped = d_y_conv.transpose(1, 2, 3, 0).reshape(n_filter, -1)
-            dx_col = W_reshape.transpose().dot(dout_reshaped)
-
-            dx = dx_col.col2im(imshape=self.cached_input_shape, field_height=h_filter, field_width=w_filter,
-                               padding=self.padding, stride=self.strides)
+            dx = d_y.convavgpool_delta(self.filters, self.cached_input_shape, padding=self.padding,
+                                                 strides=self.strides, pool_size=self.pool_size,
+                                                 pool_strides=self.pool_strides)
         else:
+            # do not compute dx when this is the first layer
             dx = None
 
         # weight update and regularization
@@ -412,7 +412,7 @@ class ConvAveragePooling2D():
 
         if self.l2reg_lambda > 0:
             dw = dw + self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
-        self.filters = ((dw * learning_rate).neg() + self.filters)
+        self.filters = (dw * learning_rate).neg() + self.filters
 
         # biases
         d_bias = d_y_conv.sum(axis=0)
@@ -658,21 +658,13 @@ class Sequential(Model):
                 layer.initialize(self)
 
     def forward(self, x):
-        prev = 0
         for layer in self.layers:
             x = layer.forward(x)
-            if isistance(x, PrivateEncodedTensor):
-                print(layer.__class__.__name__, t.COMMUNICATED_VALUES - prev)
-                prev = t.COMMUNICATED_VALUES
         return x
 
     def backward(self, d_y, learning_rate):
-        prev = t.COMMUNICATED_VALUES
         for layer in reversed(self.layers):
             d_y = layer.backward(d_y, learning_rate)
-            if isistance(x, PrivateEncodedTensor):
-                print(layer.__class__.__name__, t.COMMUNICATED_VALUES - prev)
-                prev = t.COMMUNICATED_VALUES
 
     @staticmethod
     def print_progress(batch_index, n_batches, batch_size, epoch_start, train_loss=None, train_acc=None,
@@ -725,6 +717,7 @@ class Sequential(Model):
             for batch_index, (x_batch, y_batch) in enumerate(batches):
                 if verbose >= 2:
                     print(datetime.now(), "Batch %s" % batch_index)
+
 
                 y_pred = self.forward(x_batch)
                 train_loss = loss.evaluate(y_pred, y_batch).unwrap()[0]
