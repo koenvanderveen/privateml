@@ -2,11 +2,9 @@ import numpy as np
 import sys
 from datetime import datetime, timedelta
 from functools import reduce
-from pond.tensor import NativeTensor, PublicEncodedTensor, PrivateEncodedTensor, stack
-import pond.tensor as t
+from pond.tensor import NativeTensor, stack
 import math
 import time
-
 
 
 class Layer:
@@ -22,6 +20,8 @@ class Dense(Layer):
         self.l2reg_lambda = l2reg_lambda
         self.weights = None
         self.bias = None
+        self.initializer = None
+        self.cache = None
 
     def initialize(self, initializer=None):
         if initializer is None:
@@ -74,7 +74,7 @@ class SigmoidExact(Layer):
         self.cache = y
         return y
 
-    def backward(self, d_y, learning_rate):
+    def backward(self, d_y, _):
         y = self.cache
         d_x = d_y * y * (y.neg() + 1)
         return d_x
@@ -101,12 +101,12 @@ class Sigmoid(Layer):
         x5 = x2 * x3
         x7 = x2 * x5
         x9 = x2 * x7
-        y = x9*w9 + x7*w7 + x5*w5 + x3*w3 + x*w1 + w0
+        y = x9 * w9 + x7 * w7 + x5 * w5 + x3 * w3 + x * w1 + w0
 
         self.cache = y
         return y
 
-    def backward(self, d_y, learning_rate):
+    def backward(self, d_y, _):
         y = self.cache
         d_x = d_y * y * (y.neg() + 1)
         return d_x
@@ -115,6 +115,7 @@ class Sigmoid(Layer):
 class SoftmaxStable(Layer):
 
     def __init__(self):
+        self.cache = None
         pass
 
     def initialize(self):
@@ -127,7 +128,7 @@ class SoftmaxStable(Layer):
         self.cache = probs
         return probs
 
-    def backward(self, d_probs, learning_rate):
+    def backward(self, d_probs, _):
         probs = self.cache
         batch_size = probs.shape[0]
         d_scores = probs - d_probs
@@ -138,6 +139,7 @@ class SoftmaxStable(Layer):
 class Softmax(Layer):
 
     def __init__(self):
+        self.cache = None
         pass
 
     def initialize(self):
@@ -150,7 +152,7 @@ class Softmax(Layer):
         self.cache = probs
         return probs
 
-    def backward(self, d_probs, learning_rate):
+    def backward(self, d_probs, _):
         # TODO does the split between Softmax and CrossEntropy make sense?
         probs = self.cache
         batch_size = probs.shape[0]
@@ -172,7 +174,7 @@ class ReluExact(Layer):
         self.cache = x
         return y
 
-    def backward(self, d_y, learning_rate):
+    def backward(self, d_y, _):
         x = self.cache
         d_x = (x > 0) * d_y
         return d_x
@@ -209,7 +211,7 @@ class Relu(Layer):
         self.cache = stack(powers[:-1]).flip(axis=n_dims)
         return y
 
-    def backward(self, d_y, learning_rate):
+    def backward(self, d_y, _):
         # the powers of the forward phase: x^1 ...x^order-1
         powers = self.cache
         c = d_y * self.coeff_der[-1]
@@ -251,11 +253,11 @@ class Flatten(Layer):
         y = x.reshape(x.shape[0], -1)
         return y
 
-    def backward(self, d_y, learning_rate):
+    def backward(self, d_y, _):
         return d_y.reshape(self.shape)
 
 
-class Conv2D():
+class Conv2D:
     def __init__(self, fshape, strides=1, padding=0, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp),
                  l2reg_lambda=0.0, channels_first=True):
         """ 2 Dimensional convolutional layer, expects NCHW data format
@@ -274,6 +276,9 @@ class Conv2D():
         self.cache2 = None
         self.cached_input_shape = None
         self.initializer = None
+        self.filters = None
+        self.bias = None
+        self.model = None
         assert channels_first
 
     def initialize(self, model=None):
@@ -327,9 +332,10 @@ class Conv2D():
 
         return dx
 
-class ConvAveragePooling2D():
+
+class ConvAveragePooling2D:
     def __init__(self, fshape, strides=1, padding=0, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp),
-                 l2reg_lambda=0.0, pool_size=(2,2), pool_strides=None, channels_first=True):
+                 l2reg_lambda=0.0, pool_size=(2, 2), pool_strides=None, channels_first=True):
         """ 2 Dimensional convolutional layer followed by average pooling layer
             , expects NCHW data format and is optimized for communication
             fshape: tuple of rank 4
@@ -348,10 +354,12 @@ class ConvAveragePooling2D():
         self.cache2 = None
         self.cached_input_shape = None
         self.initializer = None
-
+        self.filters = None
+        self.bias = None
+        self.model = None
         self.pool_size = pool_size
         self.pool_area = pool_size[0] * pool_size[1]
-        if pool_strides == None:
+        if pool_strides is None:
             self.pool_strides = pool_size[0]
         else:
             self.pool_strides = pool_strides
@@ -386,7 +394,8 @@ class ConvAveragePooling2D():
         for j in range(s):
             for i in range(s):
                 pooled[:, :, j, i] = x_pool[:, :, j * self.pool_strides:j * self.pool_strides + self.pool_size[0],
-                                            i * self.pool_strides:i * self.pool_strides + self.pool_size[1]].sum(axis=(2, 3))
+                                            i * self.pool_strides:i * self.pool_strides + self.pool_size[1]]\
+                                                .sum(axis=(2, 3))
 
         pooled = pooled / self.pool_area
         return pooled
@@ -400,8 +409,8 @@ class ConvAveragePooling2D():
 
         if self.model.layers.index(self) != 0:
             dx = d_y.convavgpool_delta(self.filters, self.cached_input_shape, padding=self.padding,
-                                                 strides=self.strides, pool_size=self.pool_size,
-                                                 pool_strides=self.pool_strides)
+                                       strides=self.strides, pool_size=self.pool_size,
+                                       pool_strides=self.pool_strides)
         else:
             # do not compute dx when this is the first layer
             dx = None
@@ -421,8 +430,7 @@ class ConvAveragePooling2D():
         return dx
 
 
-
-class Conv2DNaive():
+class Conv2DNaive:
 
     def __init__(self, fshape, strides=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)):
         """ 2 Dimensional convolutional layer NHWC
@@ -436,6 +444,7 @@ class Conv2DNaive():
         self.filter_init = filter_init
         self.cache = None
         self.initializer = None
+        self.filters = None
 
     def initialize(self):
         self.filters = self.filter_init(self.fshape)
@@ -468,7 +477,10 @@ class Conv2DNaive():
         s = (backwarded_fmap.shape[1] - self.fshape[0]) // self.strides + 1
         for j in range(s):
             for i in range(s):
-                backwarded_fmap[:, j * self.strides:j  * self.strides + self.fshape[0], i * self.strides:i * self.strides + self.fshape[1]] += (self.filters[np.newaxis, ...] * layer_err[:, j:j+1, i:i+1, np.newaxis, :]).sum(axis=4)
+                backwarded_fmap[:, j * self.strides:j * self.strides + self.fshape[0],
+                                i * self.strides:i * self.strides + self.fshape[1]] += \
+                                (self.filters[np.newaxis, ...] * layer_err[:, j:j + 1, i:i + 1, np.newaxis, :])\
+                                .sum(axis=4)
         return backwarded_fmap
 
     def get_grad(self, x, layer_err):
@@ -478,11 +490,12 @@ class Conv2DNaive():
         summed_x = x.sum(axis=0)
         for j in range(s):
             for i in range(s):
-                filters_err += summed_x[j  * self.strides:j * self.strides + self.fshape[0], i * self.strides:i * self.strides + self.fshape[1], :, np.newaxis]
+                filters_err += summed_x[j * self.strides:j * self.strides + self.fshape[0],
+                                        i * self.strides:i * self.strides + self.fshape[1], :, np.newaxis]
         return filters_err * total_layer_err
 
 
-class AveragePooling2D():
+class AveragePooling2D:
 
     def __init__(self, pool_size, strides=None, channels_first=True):
         """ Average Pooling layer NCHW
@@ -494,7 +507,7 @@ class AveragePooling2D():
         self.pool_area = pool_size[0] * pool_size[1]
         self.cache = None
         self.initializer = None
-        if strides == None:
+        if strides is None:
             self.strides = pool_size[0]
         else:
             self.strides = strides
@@ -504,7 +517,7 @@ class AveragePooling2D():
     def initialize(self):
         pass
 
-    def forward(self,x):
+    def forward(self, x):
         # forward pass of average pooling, assumes NCHW data format
 
         s = (x.shape[2] - self.pool_size[0]) // self.strides + 1
@@ -518,14 +531,14 @@ class AveragePooling2D():
         pooled = pooled / self.pool_area
         return pooled
 
-    def backward(self, d_y, learning_rate):
+    def backward(self, d_y, _):
         d_y_expanded = d_y.repeat(self.pool_size[0], axis=2)
         d_y_expanded = d_y_expanded.repeat(self.pool_size[1], axis=3)
         d_x = d_y_expanded / self.pool_area
         return d_x
 
 
-class AveragePooling2D_NHWC():
+class AveragePooling2DNHWC:
     def __init__(self, pool_size, strides=None):
         """ Average Pooling layer
             pool_size: (n x m) tuple
@@ -536,7 +549,7 @@ class AveragePooling2D_NHWC():
         self.pool_area = pool_size[0] * pool_size[1]
         self.cache = None
         self.initializer = None
-        if strides == None:
+        if strides is None:
             self.strides = pool_size[0]
         else:
             self.strides = strides
@@ -551,14 +564,13 @@ class AveragePooling2D_NHWC():
         for j in range(s):
             for i in range(s):
                 pooled[:, j, i, :] = x[:, j * self.strides:j * self.strides + self.pool_size[0],
-                                     i * self.strides:i * self.strides + self.pool_size[1], :].sum(axis=(1, 2))
+                                       i * self.strides:i * self.strides + self.pool_size[1], :].sum(axis=(1, 2))
 
         pooled = pooled / self.pool_area
         self.cache = x
         return pooled
 
-    def backward(self, d_y, learning_rate):
-        x = self.cache
+    def backward(self, d_y, _):
         d_y_expanded = d_y.repeat(self.pool_size[0], axis=1)
         d_y_expanded = d_y_expanded.repeat(self.pool_size[1], axis=2)
         d_x = d_y_expanded / self.pool_area
@@ -573,10 +585,12 @@ class Reveal(Layer):
     def initialize(self):
         pass
 
-    def forward(self, x):
+    @staticmethod
+    def forward(x):
         return x.reveal()
 
-    def backward(self, d_y, learning_rate):
+    @staticmethod
+    def backward(d_y, _):
         return d_y
 
 
@@ -586,26 +600,29 @@ class Loss:
 
 class Diff(Loss):
 
-    def derive(self, y_pred, y_train):
+    @staticmethod
+    def derive(y_pred, y_train):
         return y_pred - y_train
 
 
 class CrossEntropy(Loss):
 
-    def evaluate(self, probs_pred, probs_correct):
+    @staticmethod
+    def evaluate(probs_pred, probs_correct):
         batch_size = probs_pred.shape[0]
         losses = (probs_correct * probs_pred.log()).neg().sum(axis=1)
         loss = losses.sum(axis=0, keepdims=True).div(batch_size)
         return loss
 
-    def derive(self, y_pred, y_correct):
+    @staticmethod
+    def derive(_, y_correct):
         return y_correct
 
 
 class CrossEntropyStable(Loss):
 
-
-    def evaluate(self, probs_pred, probs_correct):
+    @staticmethod
+    def evaluate(probs_pred, probs_correct):
         output = probs_pred.div(probs_pred.sum(axis=1, keepdims=True))
         epsilon = 1e-7
         output = output.clip(epsilon, 1. - epsilon)
@@ -614,7 +631,8 @@ class CrossEntropyStable(Loss):
         loss = losses.sum(axis=0).div(batch_size)
         return loss
 
-    def derive(self, y_pred, y_correct):
+    @staticmethod
+    def derive(_, y_correct):
         return y_correct
 
 
@@ -634,7 +652,7 @@ class DataLoader:
         if batch_size is None:
             batch_size = self.data.shape[0]
         return (
-            self.wrapper(self.data[i:i+batch_size])
+            self.wrapper(self.data[i:i + batch_size])
             for i in range(0, self.data.shape[0], batch_size)
         )
 
@@ -648,7 +666,9 @@ class Model:
 
 class Sequential(Model):
 
-    def __init__(self, layers=[]):
+    def __init__(self, layers=None):
+        if layers is None:
+            layers = []
         self.layers = layers
 
     def initialize(self):
@@ -673,25 +693,24 @@ class Sequential(Model):
         sys.stdout.flush()
         progress = (batch_index / n_batches)
 
-        eta = timedelta(seconds=round((1.-progress) * (time.time() - epoch_start) / progress, 0)) if progress > 0 else " "
+        eta = timedelta(
+            seconds=round((1. - progress) * (time.time() - epoch_start) / progress, 0)) if progress > 0 else " "
         n_eq = int(progress * 30)
         n_dot = 30 - n_eq
         progress_bar = "=" * n_eq + ">" + n_dot * "."
 
         if val_loss is None:
             message = "{}/{} [{}] - ETA: {} - train_loss: {:.5f} - train_acc {:.5f}"
-            sys.stdout.write(message.format((batch_index+1) * batch_size, n_batches * batch_size, progress_bar,
+            sys.stdout.write(message.format((batch_index + 1) * batch_size, n_batches * batch_size, progress_bar,
                                             eta, train_loss, train_acc))
         else:
             message = "{}/{} [{}] - ETA: {} - train_loss: {:.5f} - train_acc {:.5f} - val_loss {:.5f} - val_acc {:.5f}"
-            sys.stdout.write(message.format((batch_index+1) * batch_size, n_batches * batch_size, progress_bar,
+            sys.stdout.write(message.format((batch_index + 1) * batch_size, n_batches * batch_size, progress_bar,
                                             eta, train_loss, train_acc, val_loss, val_acc))
-            # print(message.format((batch_index + 1) * batch_size, n_batches * batch_size, progress_bar, train_loss,
-            #                      train_acc, val_loss, val_acc))
         sys.stdout.flush()
 
     def fit(self, x_train, y_train, x_valid=None, y_valid=None, loss=None, batch_size=32, epochs=1000,
-            learning_rate=.01, verbose=0, eval_n_batches=None, results_file=None):
+            learning_rate=.01, verbose=0, eval_n_batches=None):
 
         if not isinstance(x_train, DataLoader): x_train = DataLoader(x_train)
         if not isinstance(y_train, DataLoader): y_train = DataLoader(y_train)
@@ -718,7 +737,6 @@ class Sequential(Model):
                 if verbose >= 2:
                     print(datetime.now(), "Batch %s" % batch_index)
 
-
                 y_pred = self.forward(x_batch)
                 train_loss = loss.evaluate(y_pred, y_batch).unwrap()[0]
                 acc = np.mean(y_batch.unwrap().argmax(axis=1) == y_pred.unwrap().argmax(axis=1))
@@ -731,12 +749,15 @@ class Sequential(Model):
                         # validation print
                         y_pred_val = self.predict(x_valid)
                         val_loss = np.sum(loss.evaluate(y_pred_val, y_valid.all_data()).unwrap())
-                        val_acc = np.mean(y_valid.all_data().unwrap().argmax(axis=1) == y_pred_val.unwrap().argmax(axis=1))
-                        self.print_progress(batch_index, n_batches, batch_size, epoch_start, train_acc=acc, train_loss=train_loss,
+                        val_acc = np.mean(
+                            y_valid.all_data().unwrap().argmax(axis=1) == y_pred_val.unwrap().argmax(axis=1))
+                        self.print_progress(batch_index, n_batches, batch_size, epoch_start, train_acc=acc,
+                                            train_loss=train_loss,
                                             val_loss=val_loss, val_acc=val_acc)
                     else:
                         # normal print
-                        self.print_progress(batch_index, n_batches, batch_size, epoch_start, train_acc=acc, train_loss=train_loss)
+                        self.print_progress(batch_index, n_batches, batch_size, epoch_start, train_acc=acc,
+                                            train_loss=train_loss)
 
         # Newline after progressbar.
         print()
@@ -748,4 +769,4 @@ class Sequential(Model):
             if verbose >= 2: print(datetime.now(), "Batch %s" % batch_index)
             y_batch = self.forward(x_batch)
             batches.append(y_batch)
-        return reduce(lambda x, y: x.concatenate(y), batches)
+        return reduce(lambda x_, y: x_.concatenate(y), batches)
