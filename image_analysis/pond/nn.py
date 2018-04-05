@@ -39,16 +39,12 @@ class Dense(Layer):
             self.bias = self.initializer(np.zeros((1, self.num_nodes)))
 
         y = x.dot(self.weights) + self.bias
-        # cache result for backward pass
         self.cache = x
         return y
 
     def backward(self, d_y, learning_rate):
-        # cache
         x = self.cache
-        # compute delta
         d_x = d_y.dot(self.weights.transpose())
-        # compute gradients for internal parameters and update
         d_weights = x.transpose().dot(d_y)
         if self.l2reg_lambda > 0:
             d_weights = d_weights + self.weights * (self.l2reg_lambda / x.shape[0])
@@ -146,7 +142,6 @@ class Softmax(Layer):
         pass
 
     def forward(self, x):
-        # we add the - x.max() for numerical stability, i.e. to prevent overflow
         exp = x.exp()
         probs = exp.div(exp.sum(axis=1, keepdims=True))
         self.cache = probs
@@ -273,7 +268,7 @@ class Conv2D:
         self.filter_init = filter_init
         self.l2reg_lambda = l2reg_lambda
         self.cache = None
-        self.cache2 = None
+        self.cached_x_col = None
         self.cached_input_shape = None
         self.initializer = None
         self.filters = None
@@ -282,14 +277,11 @@ class Conv2D:
         assert channels_first
 
     def initialize(self, model=None):
-        # weights
         self.filters = None
-        # init bias based on x
         self.bias = None
         self.model = model
 
     def forward(self, x):
-
         self.initializer = type(x)
         self.cached_input_shape = x.shape
         self.cache = x
@@ -297,7 +289,7 @@ class Conv2D:
         if self.filters is None:
             self.filters = self.initializer(self.filter_init(self.fshape))
 
-        out, self.cache2 = x.conv2d(self.filters, self.strides, self.padding)
+        out, self.cached_x_col = x.conv2d(self.filters, self.strides, self.padding)
 
         if self.bias is None:
             self.bias = self.initializer(np.zeros(out.shape[1:]))
@@ -305,30 +297,24 @@ class Conv2D:
         return out + self.bias
 
     def backward(self, d_y, learning_rate):
-        # cache
         x = self.cache
         h_filter, w_filter, d_filter, n_filter = self.filters.shape
+        dx = None
 
-        # delta (do not compute if this layer is the first layer)
         if self.model.layers.index(self) != 0:
-            W_reshape = self.filters.reshape(n_filter, -1)
+            W_reshaped = self.filters.reshape(n_filter, -1).transpose()
             dout_reshaped = d_y.transpose(1, 2, 3, 0).reshape(n_filter, -1)
-            dx_col = W_reshape.transpose().dot(dout_reshaped)
+            dx = W_reshaped.dot(dout_reshaped).col2im(imshape=self.cached_input_shape, field_height=h_filter,
+                                                      field_width=w_filter, padding=self.padding, stride=self.strides)
 
-            dx = dx_col.col2im(imshape=self.cached_input_shape, field_height=h_filter, field_width=w_filter,
-                               padding=self.padding, stride=self.strides)
-        else:
-            dx = None
-
-        # weight update and regularization
-        dw = x.conv2d_bw(d_y, self.cache2, self.filters.shape, padding=self.padding, strides=self.strides)
-        if self.l2reg_lambda > 0:
-            dw = dw + self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
-        self.filters = ((dw * learning_rate).neg() + self.filters)
-
-        # biases
+        d_w = x.conv2d_bw(d_y, self.cached_x_col, self.filters.shape, padding=self.padding, strides=self.strides)
         d_bias = d_y.sum(axis=0)
-        self.bias = ((d_bias * learning_rate).neg() + self.bias)
+
+        if self.l2reg_lambda > 0:
+            d_w = d_w + self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
+
+        self.filters = (d_w * learning_rate).neg() + self.filters
+        self.bias = (d_bias * learning_rate).neg() + self.bias
 
         return dx
 
@@ -367,9 +353,7 @@ class ConvAveragePooling2D:
         assert channels_first
 
     def initialize(self, model=None):
-        # weights
         self.filters = None
-        # init bias based on x
         self.bias = None
         self.model = model
 
@@ -379,7 +363,6 @@ class ConvAveragePooling2D:
         self.cached_input_shape = x.shape
         self.cache = x
 
-        # conv
         if self.filters is None:
             self.filters = self.initializer(self.filter_init(self.fshape))
 
@@ -388,7 +371,6 @@ class ConvAveragePooling2D:
             self.bias = self.initializer(np.zeros(out.shape[1:]))
         x_pool = out + self.bias
 
-        # pool
         s = (x_pool.shape[2] - self.pool_size[0]) // self.pool_strides + 1
         pooled = self.initializer(np.zeros((x_pool.shape[0], x_pool.shape[1], s, s)))
         for j in range(s):
@@ -404,95 +386,25 @@ class ConvAveragePooling2D:
         d_y_expanded = d_y.copy().repeat(self.pool_size[0], axis=2)
         d_y_expanded = d_y_expanded.repeat(self.pool_size[1], axis=3)
         d_y_conv = d_y_expanded / self.pool_area
-        # cache
+        dx = None
         x = self.cache
 
         if self.model.layers.index(self) != 0:
             dx = d_y.convavgpool_delta(self.filters, self.cached_input_shape, padding=self.padding,
-                                       strides=self.strides, pool_size=self.pool_size,
-                                       pool_strides=self.pool_strides)
-        else:
-            # do not compute dx when this is the first layer
-            dx = None
+                                                 strides=self.strides, pool_size=self.pool_size,
+                                                 pool_strides=self.pool_strides)
 
-        # weight update and regularization
-        dw = x.convavgpool_bw(d_y, self.cache2, self.filters.shape, self.padding, self.strides,
+        d_w = x.convavgpool_bw(d_y, self.cache2, self.filters.shape, self.padding, self.strides,
                               self.pool_size, self.pool_strides)
+        d_bias = d_y_conv.sum(axis=0)
 
         if self.l2reg_lambda > 0:
-            dw = dw + self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
-        self.filters = (dw * learning_rate).neg() + self.filters
+            d_w = d_w + self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
 
-        # biases
-        d_bias = d_y_conv.sum(axis=0)
+        self.filters = (d_w * learning_rate).neg() + self.filters
         self.bias = ((d_bias * learning_rate).neg() + self.bias)
 
         return dx
-
-
-class Conv2DNaive:
-
-    def __init__(self, fshape, strides=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)):
-        """ 2 Dimensional convolutional layer NHWC
-            fshape: tuple of rank 4
-            strides: int with stride size
-            filter init: lambda function with shape parameter
-            Example: Conv2D((4, 4, 1, 20), strides=2, filter_init=lambda shp: np.random.normal(scale=0.01, size=shp))
-        """
-        self.fshape = fshape
-        self.strides = strides
-        self.filter_init = filter_init
-        self.cache = None
-        self.initializer = None
-        self.filters = None
-
-    def initialize(self):
-        self.filters = self.filter_init(self.fshape)
-
-    def forward(self, x):
-        # TODO: padding
-        s = (x.shape[1] - self.fshape[0]) // self.strides + 1
-        self.initializer = type(x)
-        fmap = self.initializer(np.zeros((x.shape[0], s, s, self.fshape[-1])))
-        for j in range(s):
-            for i in range(s):
-                fmap[:, j, i, :] = (x[:, j * self.strides:j * self.strides + self.fshape[0],
-                                    i * self.strides:i * self.strides + self.fshape[1],
-                                    :, np.newaxis] * self.filters).sum(axis=(1, 2, 3))
-        self.cache = x
-        return fmap
-
-    def backward(self, d_y, learning_rate):
-        x = self.cache
-        # compute gradients for internal parameters and update
-        d_weights = self.get_grad(x, d_y)
-        self.filters = (d_weights * learning_rate).neg() + self.filters
-        # compute and return external gradient
-        d_x = self.backwarded_error(d_y)
-        return d_x
-
-    def backwarded_error(self, layer_err):
-        bfmap_shape = (layer_err.shape[1] - 1) * self.strides + self.fshape[0]
-        backwarded_fmap = self.initializer(np.zeros((layer_err.shape[0], bfmap_shape, bfmap_shape, self.fshape[-2])))
-        s = (backwarded_fmap.shape[1] - self.fshape[0]) // self.strides + 1
-        for j in range(s):
-            for i in range(s):
-                backwarded_fmap[:, j * self.strides:j * self.strides + self.fshape[0],
-                                i * self.strides:i * self.strides + self.fshape[1]] += \
-                                (self.filters[np.newaxis, ...] * layer_err[:, j:j + 1, i:i + 1, np.newaxis, :])\
-                                .sum(axis=4)
-        return backwarded_fmap
-
-    def get_grad(self, x, layer_err):
-        total_layer_err = layer_err.sum(axis=(0, 1, 2))
-        filters_err = self.initializer(np.zeros(self.fshape))
-        s = (x.shape[1] - self.fshape[0]) // self.strides + 1
-        summed_x = x.sum(axis=0)
-        for j in range(s):
-            for i in range(s):
-                filters_err += summed_x[j * self.strides:j * self.strides + self.fshape[0],
-                                        i * self.strides:i * self.strides + self.fshape[1], :, np.newaxis]
-        return filters_err * total_layer_err
 
 
 class AveragePooling2D:
@@ -519,7 +431,6 @@ class AveragePooling2D:
 
     def forward(self, x):
         # forward pass of average pooling, assumes NCHW data format
-
         s = (x.shape[2] - self.pool_size[0]) // self.strides + 1
         self.initializer = type(x)
         pooled = self.initializer(np.zeros((x.shape[0], x.shape[1], s, s)))
@@ -534,45 +445,6 @@ class AveragePooling2D:
     def backward(self, d_y, _):
         d_y_expanded = d_y.repeat(self.pool_size[0], axis=2)
         d_y_expanded = d_y_expanded.repeat(self.pool_size[1], axis=3)
-        d_x = d_y_expanded / self.pool_area
-        return d_x
-
-
-class AveragePooling2DNHWC:
-    def __init__(self, pool_size, strides=None):
-        """ Average Pooling layer
-            pool_size: (n x m) tuple
-            strides: int with stride size
-            Example: AveragePooling2D(pool_size=(2,2))
-        """
-        self.pool_size = pool_size
-        self.pool_area = pool_size[0] * pool_size[1]
-        self.cache = None
-        self.initializer = None
-        if strides is None:
-            self.strides = pool_size[0]
-        else:
-            self.strides = strides
-
-    def initialize(self):
-        pass
-
-    def forward(self, x):
-        s = (x.shape[1] - self.pool_size[0]) // self.strides + 1
-        self.initializer = type(x)
-        pooled = self.initializer(np.zeros((x.shape[0], s, s, x.shape[3])))
-        for j in range(s):
-            for i in range(s):
-                pooled[:, j, i, :] = x[:, j * self.strides:j * self.strides + self.pool_size[0],
-                                       i * self.strides:i * self.strides + self.pool_size[1], :].sum(axis=(1, 2))
-
-        pooled = pooled / self.pool_area
-        self.cache = x
-        return pooled
-
-    def backward(self, d_y, _):
-        d_y_expanded = d_y.repeat(self.pool_size[0], axis=1)
-        d_y_expanded = d_y_expanded.repeat(self.pool_size[1], axis=2)
         d_x = d_y_expanded / self.pool_area
         return d_x
 
@@ -612,23 +484,6 @@ class CrossEntropy(Loss):
         batch_size = probs_pred.shape[0]
         losses = (probs_correct * probs_pred.log()).neg().sum(axis=1)
         loss = losses.sum(axis=0, keepdims=True).div(batch_size)
-        return loss
-
-    @staticmethod
-    def derive(_, y_correct):
-        return y_correct
-
-
-class CrossEntropyStable(Loss):
-
-    @staticmethod
-    def evaluate(probs_pred, probs_correct):
-        output = probs_pred.div(probs_pred.sum(axis=1, keepdims=True))
-        epsilon = 1e-7
-        output = output.clip(epsilon, 1. - epsilon)
-        batch_size = probs_pred.shape[0]
-        losses = (probs_correct * output.log()).neg().sum(axis=1)
-        loss = losses.sum(axis=0).div(batch_size)
         return loss
 
     @staticmethod
