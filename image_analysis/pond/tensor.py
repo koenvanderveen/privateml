@@ -111,13 +111,6 @@ class NativeTensor:
         if isinstance(y, PrivateEncodedTensor): return PublicEncodedTensor.from_values(x.values).dot(y)
         raise TypeError("%s does not support %s" % (type(x), type(y)))
 
-    def matmul(x, y):
-        y = NativeTensor.wrap_if_needed(y)
-        if isinstance(y, NativeTensor): return NativeTensor(np.matmul(x.values, y.values))
-        if isinstance(y, PublicEncodedTensor): return PublicEncodedTensor.from_values(x.values).matmul(y)
-        if isinstance(y, PrivateEncodedTensor): return PublicEncodedTensor.from_values(x.values).matmul(y)
-        raise TypeError("%s does not support %s" % (type(x), type(y)))
-
     def div(x, y):
         y = NativeTensor.wrap_if_needed(y)
         if isinstance(y, NativeTensor): return NativeTensor(x.values / y.values)
@@ -191,9 +184,6 @@ class NativeTensor:
         if isinstance(shape[0], tuple):
             shape = shape[0]
         return NativeTensor(self.values.reshape(shape))
-
-    def pad(self, pad_width, mode='constant'):
-        return NativeTensor(np.pad(self.values, pad_width=pad_width, mode=mode))
 
     def expand_dims(self, axis=0):
         self.values = np.expand_dims(self.values, axis=axis)
@@ -406,9 +396,6 @@ class PublicEncodedTensor:
         if isinstance(y, PublicEncodedTensor): return x.mul(y.inv())
         raise TypeError("%s does not support %s" % (type(x), type(y)))
 
-    def matmul(x, y):
-        return PublicEncodedTensor(np.matmul(x.elements, y.elements))
-
     def __div__(x, y):
         return x.div(y)
 
@@ -446,9 +433,6 @@ class PublicEncodedTensor:
     def expand_dims(self, axis=0):
         self.elements = np.expand_dims(self.elements, axis=axis)
         return self
-
-    def pad(self, pad_width, mode='constant'):
-        return PublicEncodedTensor.from_elements(np.pad(self.elements, pad_width=pad_width, mode=mode))
 
     def im2col(x, h_filter, w_filter, padding, strides):
         if use_cython:
@@ -1200,11 +1184,6 @@ class PrivateEncodedTensor:
         if isinstance(shape[0], tuple):
             shape = shape[0]
         return PrivateEncodedTensor.from_shares(self.shares0.reshape(shape), self.shares1.reshape(shape))
-
-    def pad(self, pad_width, mode='constant'):
-        return PrivateEncodedTensor.from_shares(np.pad(self.shares0, pad_width=pad_width, mode=mode),
-                                                np.pad(self.shares1, pad_width=pad_width, mode=mode))
-
 
     def im2col(x, h_filter, w_filter, padding, strides):
         if use_cython:
