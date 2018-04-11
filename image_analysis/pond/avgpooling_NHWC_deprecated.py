@@ -9,7 +9,7 @@ class AveragePooling2D_NHWC():
         self.pool_area = pool_size[0] * pool_size[1]
         self.cache = None
         self.initializer = None
-        if strides == None:
+        if strides is None:
             self.strides = pool_size[0]
         else:
             self.strides = strides
