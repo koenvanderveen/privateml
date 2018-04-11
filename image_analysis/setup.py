@@ -4,9 +4,9 @@ from Cython.Build import cythonize
 import numpy
 
 extensions = [
-      Extension('im2col_cython_float', ['im2col_cython_float.pyx'],
+      Extension('im2col/im2col_cython_float', ['im2col/im2col_cython_float.pyx'],
                     include_dirs = [numpy.get_include()]),
-    Extension('im2col_cython_object', ['im2col_cython_object.pyx'],
+    Extension('im2col/im2col_cython_object', ['im2col/im2col_cython_object.pyx'],
               include_dirs = [numpy.get_include()]),
 ]
 

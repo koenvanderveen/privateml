@@ -21,7 +21,7 @@ __pycache__/
 # Distribution / packaging
 .Python
 env/
-build/
+image_analysis/build/
 develop-eggs/
 dist/
 downloads/

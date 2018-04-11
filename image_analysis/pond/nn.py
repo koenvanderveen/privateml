@@ -24,21 +24,14 @@ class Dense(Layer):
         self.bias = None
         self.cache = None
 
-    def initialize(self, initializer=None):
-        if initializer is None:
-            self.weights = None
-            self.bias = None
-        else:
+    def initialize(self, input_shape, initializer=None, model=None):
+        if initializer is not None:
             self.weights = initializer(np.random.randn(self.num_features, self.num_nodes) * self.initial_scale)
             self.bias = initializer(np.zeros((1, self.num_nodes)))
+        output_shape = [input_shape[0]] + [self.num_nodes]
+        return output_shape
 
     def forward(self, x):
-        self.initializer = type(x)
-        if self.weights is None:
-            self.weights = self.initializer(np.random.randn(self.num_features, self.num_nodes) * self.initial_scale)
-        if self.bias is None:
-            self.bias = self.initializer(np.zeros((1, self.num_nodes)))
-
         y = x.dot(self.weights) + self.bias
         self.cache = x
         return y
@@ -63,15 +56,15 @@ class SigmoidExact(Layer):
     def __init__(self):
         self.cache = None
 
-    def initialize(self):
-        pass
+    def initialize(self, input_shape, **kwargs):
+        return input_shape
 
     def forward(self, x):
         y = (x.neg().exp() + 1).inv()
         self.cache = y
         return y
 
-    def backward(self, d_y, learning_rate):
+    def backward(self, d_y, *_):
         y = self.cache
         d_x = d_y * y * (y.neg() + 1)
         return d_x
@@ -82,8 +75,8 @@ class Sigmoid(Layer):
     def __init__(self):
         self.cache = None
 
-    def initialize(self):
-        pass
+    def initialize(self, input_shape, **kwargs):
+        return input_shape
 
     def forward(self, x):
         w0 = 0.5
@@ -114,8 +107,9 @@ class SoftmaxStable(Layer):
     def __init__(self):
         pass
 
-    def initialize(self):
-        pass
+    def initialize(self, input_shape, **kwargs):
+        self.cache = None
+        return input_shape
 
     def forward(self, x):
         # we add the - x.max() for numerical stability, i.e. to prevent overflow
@@ -137,8 +131,8 @@ class Softmax(Layer):
     def __init__(self):
         pass
 
-    def initialize(self):
-        pass
+    def initialize(self, input_shape, **kwargs):
+        return input_shape
 
     def forward(self, x):
         exp = x.exp()
@@ -160,8 +154,8 @@ class ReluExact(Layer):
     def __init__(self):
         self.cache = None
 
-    def initialize(self):
-        pass
+    def initialize(self, input_shape, **kwargs):
+        return input_shape
 
     def forward(self, x):
         y = x * (x > 0)
@@ -176,7 +170,7 @@ class ReluExact(Layer):
 
 class Relu(Layer):
 
-    def __init__(self, order=7, domain=(-1, 1), n=1000):
+    def __init__(self, order=3, domain=(-1, 1), n=1000):
         self.cache = None
         self.n_coeff = order + 1
         self.order = order
@@ -185,8 +179,8 @@ class Relu(Layer):
         self.initializer = None
         assert order > 2
 
-    def initialize(self):
-        pass
+    def initialize(self, input_shape, **kwargs):
+        return input_shape
 
     def forward(self, x):
         self.initializer = type(x)
@@ -199,7 +193,7 @@ class Relu(Layer):
 
         # stack list into tensor
         forward_powers = stack(powers).flip(axis=n_dims)
-        y = forward_powers.dot(self.coeff[:-1]) + x * self.coeff[-1]
+        y = forward_powers.dot(self.coeff[:-1]) + self.coeff[-1]
 
         # cache all powers except the last
         self.cache = stack(powers[:-1]).flip(axis=n_dims)
@@ -224,8 +218,8 @@ class Dropout(Layer):
     def __init__(self, rate):
         self.rate = rate
 
-    def initialize(self):
-        pass
+    def initialize(self, input_shape, **kwargs):
+        return input_shape
 
     def forward(self, x):
         pass
@@ -238,8 +232,8 @@ class Flatten(Layer):
     def __init__(self):
         self.shape = None
 
-    def initialize(self):
-        pass
+    def initialize(self, input_shape, **kwargs):
+        return [input_shape[0]] + [np.prod(input_shape[1:])]
 
     def forward(self, x):
         self.shape = x.shape
@@ -271,23 +265,25 @@ class Conv2D():
         self.initializer = None
         assert channels_first
 
-    def initialize(self, model=None):
-        self.filters = None
-        self.bias = None
+    def initialize(self, input_shape, model=None, initializer=None):
         self.model = model
 
+        if initializer is not None:
+            h_filter, w_filter, d_filters, n_filters = self.fshape
+            n_x, d_x, h_x, w_x = input_shape
+            h_out = int((h_x - h_filter + 2 * self.padding) / self.strides + 1)
+            w_out = int((w_x - w_filter + 2 * self.padding) / self.strides + 1)
+
+            self.bias = initializer(np.zeros((n_filters, h_out, w_out)))
+            self.filters = initializer(self.filter_init(self.fshape))
+
+        return [n_x, n_filters, h_out, w_out]
+
+
     def forward(self, x):
-        self.initializer = type(x)
         self.cached_input_shape = x.shape
         self.cache = x
-
-        if self.filters is None:
-            self.filters = self.initializer(self.filter_init(self.fshape))
-
         out, self.cached_x_col = x.conv2d(self.filters, self.strides, self.padding)
-
-        if self.bias is None:
-            self.bias = self.initializer(np.zeros(out.shape[1:]))
 
         return out + self.bias
 
@@ -344,23 +340,28 @@ class ConvAveragePooling2D():
 
         assert channels_first
 
-    def initialize(self, model=None):
-        self.filters = None
-        self.bias = None
+    def initialize(self, input_shape, model=None, initializer=None):
         self.model = model
 
-    def forward(self, x):
+        if initializer is not None:
+            h_filter, w_filter, d_filters, n_filters = self.fshape
+            n_x, d_x, h_x, w_x = input_shape
+            h_out = int((h_x - h_filter + 2 * self.padding) / self.strides + 1)
+            w_out = int((w_x - w_filter + 2 * self.padding) / self.strides + 1)
 
+            self.bias = initializer(np.zeros((n_filters, h_out, w_out)))
+            self.filters = initializer(self.filter_init(self.fshape))
+            s = (h_out - self.pool_size[0]) // self.pool_strides + 1
+
+        return [n_x, n_filters, s, s]
+
+
+    def forward(self, x):
         self.initializer = type(x)
         self.cached_input_shape = x.shape
         self.cache = x
 
-        if self.filters is None:
-            self.filters = self.initializer(self.filter_init(self.fshape))
-
         out, self.cache2 = x.conv2d(self.filters, self.strides, self.padding)
-        if self.bias is None:
-            self.bias = self.initializer(np.zeros(out.shape[1:]))
         x_pool = out + self.bias
 
         s = (x_pool.shape[2] - self.pool_size[0]) // self.pool_strides + 1
@@ -417,8 +418,9 @@ class AveragePooling2D():
 
         assert channels_first
 
-    def initialize(self):
-        pass
+    def initialize(self, input_shape, **kwargs):
+        s = (input_shape[2] - self.pool_size[0]) // self.strides + 1
+        return input_shape[:2] + [s, s]
 
     def forward(self,x):
         s = (x.shape[2] - self.pool_size[0]) // self.strides + 1
@@ -444,8 +446,8 @@ class Reveal(Layer):
     def __init__(self):
         pass
 
-    def initialize(self):
-        pass
+    def initialize(self, input_shape, **kwargs):
+        return input_shape
 
     def forward(self, x):
         return x.reveal()
@@ -509,11 +511,9 @@ class Sequential(Model):
     def __init__(self, layers=[]):
         self.layers = layers
 
-    def initialize(self):
+    def initialize(self, input_shape, initializer):
         for layer in self.layers:
-            layer.initialize()
-            if isinstance(layer, Conv2D) or isinstance(layer, ConvAveragePooling2D):
-                layer.initialize(self)
+            input_shape = layer.initialize(input_shape=input_shape, initializer= initializer, model=self)
 
     def forward(self, x):
         for layer in self.layers:

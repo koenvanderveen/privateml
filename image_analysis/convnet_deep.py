@@ -4,7 +4,7 @@ with warnings.catch_warnings():
     import numpy as np
     import keras
 from pond.tensor import NativeTensor, PrivateEncodedTensor, PublicEncodedTensor
-from pond.nn import Dense, Sigmoid, SigmoidExact, ReluExact, Relu, Reveal, Diff, Softmax, CrossEntropy, SoftmaxStable, CrossEntropyStable, Sequential, DataLoader, Conv2D, AveragePooling2D, Flatten
+from pond.nn import Dense, Relu, Reveal, CrossEntropy, SoftmaxStable, Sequential, DataLoader, Conv2D, AveragePooling2D, Flatten
 from keras.utils import to_categorical
 np.random.seed(40)
 
@@ -22,27 +22,24 @@ y_test = to_categorical(y_test, 10)
 
 
 tensortype = NativeTensor
-l2 = 0
+batch_size = 128
+input_shape = [batch_size] + list(x_train.shape[1:])
 
 convnet_deep = Sequential([
-    Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.uniform(low=-0.14, high=0.14, size=shp),
-           l2reg_lambda=l2),
-    ReluExact(),
-    Conv2D((3, 3, 32, 32), strides=1, padding=1, filter_init=lambda shp: np.random.uniform(low=-0.1, high=0.1, size=shp),
-           l2reg_lambda=l2),
-    ReluExact(),
+    Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.uniform(low=-0.14, high=0.14, size=shp)),
     AveragePooling2D(pool_size=(2, 2)),
+    Relu(),
+    Conv2D((3, 3, 32, 32), strides=1, padding=1, filter_init=lambda shp: np.random.uniform(low=-0.1, high=0.1, size=shp)),
+    AveragePooling2D(pool_size=(2, 2)),
+    Relu(),
     Flatten(),
-    Dense(10, 1568*4, l2reg_lambda=l2),
+    Dense(10, 1568),
     Reveal(),
-    # SigmoidExact(),
     SoftmaxStable()
 ])
 
 
-
-
-convnet_deep.initialize()
+convnet_deep.initialize(initializer=tensortype, input_shape=input_shape)
 convnet_deep.fit(
     x_train=DataLoader(x_train, wrapper=tensortype),
     y_train=DataLoader(y_train, wrapper=tensortype),
@@ -50,7 +47,7 @@ convnet_deep.fit(
     y_valid=DataLoader(y_test, wrapper=tensortype),
     loss=CrossEntropy(),
     epochs=5,
-    batch_size=128,
+    batch_size=batch_size,
     verbose=1,
     learning_rate=0.01
 )
