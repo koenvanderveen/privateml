@@ -17,7 +17,7 @@ _ = np.seterr(over='raise')
 _ = np.seterr(under='raise')
 _ = np.seterr(invalid='raise')
 
-tensortype = NativeTensor
+tensortype = PrivateEncodedTensor
 batch_size = 128
 input_shape = [batch_size] + list(x_train.shape[1:])
 
