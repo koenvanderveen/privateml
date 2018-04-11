@@ -23,7 +23,7 @@ class Dense(Layer):
         self.initializer = None
         self.cache = None
 
-    def initialize(self, input_shape, initializer=None):
+    def initialize(self, input_shape, initializer=None, **_):
         if initializer is not None:
             self.weights = initializer(np.random.randn(self.num_features, self.num_nodes) * self.initial_scale)
             self.bias = initializer(np.zeros((1, self.num_nodes)))
@@ -532,7 +532,7 @@ class Sequential(Model):
             layers = []
         self.layers = layers
 
-    def initialize(self, input_shape, initializer):
+    def initialize(self, input_shape, initializer, **_):
         for layer in self.layers:
             input_shape = layer.initialize(input_shape=input_shape, initializer=initializer, model=self)
 
