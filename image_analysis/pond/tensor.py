@@ -1075,7 +1075,7 @@ class PrivateEncodedTensor:
         z = self.mul(minus_one)
         return PrivateEncodedTensor.from_shares(z.shares0, z.shares1)
 
-    def transpose(self, reuse_mask=REUSE_MASK, *axes):
+    def transpose(self, *axes, reuse_mask=REUSE_MASK):
         if self.mask is not None and reuse_mask:
             out = PrivateEncodedTensor.from_shares(self.shares0.transpose(*axes), self.shares1.transpose(*axes))
             if self.mask is not None: out.mask = self.mask.transpose(*axes)
