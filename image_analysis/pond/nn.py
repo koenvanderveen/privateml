@@ -23,7 +23,7 @@ class Dense(Layer):
         self.initializer = None
         self.cache = None
 
-    def initialize(self, input_shape, initializer=None, model=None):
+    def initialize(self, input_shape, initializer=None):
         if initializer is not None:
             self.weights = initializer(np.random.randn(self.num_features, self.num_nodes) * self.initial_scale)
             self.bias = initializer(np.zeros((1, self.num_nodes)))
@@ -55,7 +55,8 @@ class SigmoidExact(Layer):
     def __init__(self):
         self.cache = None
 
-    def initialize(self, input_shape, **kwargs):
+    @staticmethod
+    def initialize(input_shape, **_):
         return input_shape
 
     def forward(self, x):
@@ -74,7 +75,8 @@ class Sigmoid(Layer):
     def __init__(self):
         self.cache = None
 
-    def initialize(self, input_shape, **kwargs):
+    @staticmethod
+    def initialize(input_shape, **_):
         return input_shape
 
     def forward(self, x):
@@ -107,7 +109,7 @@ class SoftmaxStable(Layer):
         self.cache = None
         pass
 
-    def initialize(self, input_shape, **kwargs):
+    def initialize(self, input_shape, **_):
         self.cache = None
         return input_shape
 
@@ -132,7 +134,8 @@ class Softmax(Layer):
         self.cache = None
         pass
 
-    def initialize(self, input_shape, **kwargs):
+    @staticmethod
+    def initialize(input_shape, **_):
         return input_shape
 
     def forward(self, x):
@@ -155,7 +158,8 @@ class ReluExact(Layer):
     def __init__(self):
         self.cache = None
 
-    def initialize(self, input_shape, **kwargs):
+    @staticmethod
+    def initialize(input_shape, **_):
         return input_shape
 
     def forward(self, x):
@@ -180,7 +184,8 @@ class Relu(Layer):
         self.initializer = None
         assert order > 2
 
-    def initialize(self, input_shape, **kwargs):
+    @staticmethod
+    def initialize(input_shape, **_):
         return input_shape
 
     def forward(self, x):
@@ -220,7 +225,8 @@ class Dropout(Layer):
     def __init__(self, rate):
         self.rate = rate
 
-    def initialize(self, input_shape, **kwargs):
+    @staticmethod
+    def initialize(input_shape, **_):
         return input_shape
 
     def forward(self, x):
@@ -234,7 +240,8 @@ class Flatten(Layer):
     def __init__(self):
         self.shape = None
 
-    def initialize(self, input_shape, **kwargs):
+    @staticmethod
+    def initialize(input_shape, **_):
         return [input_shape[0]] + [np.prod(input_shape[1:])]
 
     def forward(self, x):
@@ -273,17 +280,15 @@ class Conv2D:
     def initialize(self, input_shape, model=None, initializer=None):
         self.model = model
 
-        if initializer is not None:
-            h_filter, w_filter, d_filters, n_filters = self.fshape
-            n_x, d_x, h_x, w_x = input_shape
-            h_out = int((h_x - h_filter + 2 * self.padding) / self.strides + 1)
-            w_out = int((w_x - w_filter + 2 * self.padding) / self.strides + 1)
+        h_filter, w_filter, d_filters, n_filters = self.fshape
+        n_x, d_x, h_x, w_x = input_shape
+        h_out = int((h_x - h_filter + 2 * self.padding) / self.strides + 1)
+        w_out = int((w_x - w_filter + 2 * self.padding) / self.strides + 1)
 
-            self.bias = initializer(np.zeros((n_filters, h_out, w_out)))
-            self.filters = initializer(self.filter_init(self.fshape))
+        self.bias = initializer(np.zeros((n_filters, h_out, w_out)))
+        self.filters = initializer(self.filter_init(self.fshape))
 
         return [n_x, n_filters, h_out, w_out]
-
 
     def forward(self, x):
         self.cached_input_shape = x.shape
@@ -351,18 +356,16 @@ class ConvAveragePooling2D:
     def initialize(self, input_shape, model=None, initializer=None):
         self.model = model
 
-        if initializer is not None:
-            h_filter, w_filter, d_filters, n_filters = self.fshape
-            n_x, d_x, h_x, w_x = input_shape
-            h_out = int((h_x - h_filter + 2 * self.padding) / self.strides + 1)
-            w_out = int((w_x - w_filter + 2 * self.padding) / self.strides + 1)
+        h_filter, w_filter, d_filters, n_filters = self.fshape
+        n_x, d_x, h_x, w_x = input_shape
+        h_out = int((h_x - h_filter + 2 * self.padding) / self.strides + 1)
+        w_out = int((w_x - w_filter + 2 * self.padding) / self.strides + 1)
 
-            self.bias = initializer(np.zeros((n_filters, h_out, w_out)))
-            self.filters = initializer(self.filter_init(self.fshape))
-            s = (h_out - self.pool_size[0]) // self.pool_strides + 1
+        self.bias = initializer(np.zeros((n_filters, h_out, w_out)))
+        self.filters = initializer(self.filter_init(self.fshape))
+        s = (h_out - self.pool_size[0]) // self.pool_strides + 1
 
         return [n_x, n_filters, s, s]
-
 
     def forward(self, x):
         self.initializer = type(x)
@@ -396,7 +399,7 @@ class ConvAveragePooling2D:
                                                  pool_strides=self.pool_strides)
 
         d_w = x.convavgpool_bw(d_y, self.cache2, self.filters.shape, self.padding, self.strides,
-                              self.pool_size, self.pool_strides)
+                               self.pool_size, self.pool_strides)
         d_bias = d_y_conv.sum(axis=0)
 
         if self.l2reg_lambda > 0:
@@ -427,7 +430,7 @@ class AveragePooling2D:
 
         assert channels_first
 
-    def initialize(self, input_shape, **kwargs):
+    def initialize(self, input_shape, **_):
         s = (input_shape[2] - self.pool_size[0]) // self.strides + 1
         return input_shape[:2] + [s, s]
 
@@ -456,7 +459,8 @@ class Reveal(Layer):
     def __init__(self):
         pass
 
-    def initialize(self, input_shape, **kwargs):
+    @staticmethod
+    def initialize(input_shape, **_):
         return input_shape
 
     @staticmethod
@@ -530,7 +534,7 @@ class Sequential(Model):
 
     def initialize(self, input_shape, initializer):
         for layer in self.layers:
-            input_shape = layer.initialize(input_shape=input_shape, initializer= initializer, model=self)
+            input_shape = layer.initialize(input_shape=input_shape, initializer=initializer, model=self)
 
     def forward(self, x):
         for layer in self.layers:

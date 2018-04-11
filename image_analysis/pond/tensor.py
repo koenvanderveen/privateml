@@ -15,7 +15,6 @@ except ImportError as e:
     use_cython = False
 
 
-
 def im2col(x, h_filter, w_filter, padding, strides):
     if use_cython:
         if x.dtype == np.dtype('float64'):
@@ -24,6 +23,7 @@ def im2col(x, h_filter, w_filter, padding, strides):
             return im2col_cython_object(x, h_filter, w_filter, padding, strides)
     else:
         return im2col_indices(x, h_filter, w_filter, padding, strides)
+
 
 def col2im(x, imshape, field_height, field_width, padding, stride):
     if use_cython:
@@ -35,7 +35,6 @@ def col2im(x, imshape, field_height, field_width, padding, stride):
                                               field_height, field_width, padding, stride)
     else:
         return col2im_indices(x, imshape, field_height, field_width, padding, stride)
-
 
 
 class NativeTensor:
@@ -446,7 +445,8 @@ class PublicEncodedTensor:
         return PublicEncodedTensor.from_elements(im2col(x.elements, h_filter, w_filter, padding, strides))
 
     def col2im(x, imshape, field_height, field_width, padding, stride):
-        return PublicEncodedTensor.from_elements(col2im(x.elements, imshape, field_height, field_width, padding, stride))
+        return PublicEncodedTensor.from_elements(
+            col2im(x.elements, imshape, field_height, field_width, padding, stride))
 
     def conv2d(x, filters, strides, padding):
         # shapes, assuming NCHW
@@ -728,6 +728,7 @@ def generate_mul_triple(shape1, shape2, shares_a=None, shares_b=None):
     shares_ab = PrivateFieldTensor.from_elements((a * b) % Q)
     return shares_a, shares_b, shares_ab
 
+
 def generate_dot_triple(m, n, o, shares_a=None, shares_b=None):
     if shares_a is None:
         a = np.array([random.randrange(Q) for _ in range(m * n)]).astype(DTYPE).reshape((m, n))
@@ -762,6 +763,7 @@ def generate_conv_triple(xshape, yshape, strides, padding):
 
     return PrivateFieldTensor.from_elements(a), PrivateFieldTensor.from_elements(b), \
            PrivateFieldTensor.from_elements(c), PrivateFieldTensor.from_elements(a_col)
+
 
 def generate_convbw_triple(xshape, yshape, shares_a=None, shares_a_col=None):
     if shares_a is None:
@@ -803,7 +805,8 @@ def generate_conv_pool_bw_triple(xshape, yshape, pool_size, n_filter, shares_a=N
         b = shares_b.reveal(count_communication=False).elements
 
     if shares_b_expanded is None:
-        b_expanded = b.repeat(pool_size[0], axis=2).repeat(pool_size[1], axis=3).transpose(1, 2, 3, 0).reshape(n_filter, -1)
+        b_expanded = b.repeat(pool_size[0], axis=2).repeat(pool_size[1], axis=3).transpose(1, 2, 3, 0)\
+            .reshape(n_filter, -1)
         shares_b_expanded = PrivateFieldTensor.from_elements(shares_b_expanded)
     else:
         b_expanded = shares_b_expanded.reveal(count_communication=False).elements
@@ -864,7 +867,7 @@ def stack(tensors, axis=-1):
 class PrivateEncodedTensor:
 
     def __init__(self, values, shares0=None, shares1=None, mask=None, masked=None):
-        if not values is None:
+        if values is not None:
             if not isinstance(values, np.ndarray):
                 values = np.array([values])
             shares0, shares1 = share(encode(values))
@@ -889,8 +892,8 @@ class PrivateEncodedTensor:
         return PrivateEncodedTensor(None, shares0, shares1)
 
     @staticmethod
-    def from_shares(shares0, shares1):
-        return PrivateEncodedTensor(None, shares0, shares1)
+    def from_shares(shares0, shares1, mask=None, masked=None):
+        return PrivateEncodedTensor(None, shares0, shares1, mask, masked)
 
     def copy(self):
         result = PrivateEncodedTensor(None, self.shares0.copy(), self.shares1.copy())
@@ -926,14 +929,14 @@ class PrivateEncodedTensor:
             if self.masked is not None and other.masked is not None:
                 self.masked[idx] = other.masked
         else:
-            raise TypeError("%s does not support %s" % (type(self), type(y)))
+            raise TypeError("%s does not support %s" % (type(self), type(other)))
 
     def concatenate(self, other):
         if isinstance(other, PrivateEncodedTensor):
             shares0 = np.concatenate([self.shares0, other.shares0])
             shares1 = np.concatenate([self.shares1, other.shares1])
             return PrivateEncodedTensor.from_shares(shares0, shares1)
-        raise TypeError("%s does not support %s" % (type(self), type(y)))
+        raise TypeError("%s does not support %s" % (type(self), type(other)))
 
     @property
     def shape(self):
@@ -1006,7 +1009,7 @@ class PrivateEncodedTensor:
         if isinstance(y, PrivateEncodedTensor):
             a, b, alpha, beta = None, None, None, None
             if reuse_mask: a, alpha, b, beta = x.mask, x.masked, y.mask, y.masked
-            if precomputed is None: precomputed = generate_mul_triple(x.shape, y.shape, a=a, b=b)
+            if precomputed is None: precomputed = generate_mul_triple(x.shape, y.shape, shares_a=a, shares_b=b)
             a, b, ab = precomputed
             if alpha is None: alpha = (x - a).reveal()
             if beta is None: beta = (y - b).reveal()
@@ -1148,7 +1151,7 @@ class PrivateEncodedTensor:
                 alpha_conv_b = b_col.dot(alpha_col)
                 a_conv_beta = beta_col.dot(a_col)
 
-                z = (alpha_conv_beta + alpha_conv_b + a_conv_beta + a_conv_b).reshape(n_filters, h_out,w_out,
+                z = (alpha_conv_beta + alpha_conv_b + a_conv_beta + a_conv_b).reshape(n_filters, h_out, w_out,
                                                                                       n_x).transpose(3, 0, 1, 2)
                 if save_mask:
                     x.mask, x.masked, x.mask_transformed, x.masked_transformed = a, alpha, a_col, alpha_col
@@ -1164,19 +1167,20 @@ class PrivateEncodedTensor:
 
         raise TypeError("%s does not support %s" % (type(x), type(y)))
 
-    def conv2d_bw(x, d_y, X_col, filter_shape, padding=None, strides=None, use_specialized_triple=USE_SPECIALIZED_TRIPLE,
-                  reuse_mask=REUSE_MASK, precomputed=None):
+    def conv2d_bw(x, d_y, x_col, filter_shape, padding=None, strides=None,
+                  use_specialized_triple=USE_SPECIALIZED_TRIPLE, reuse_mask=REUSE_MASK):
         h_filter, w_filter, d_filter, n_filter = filter_shape
         d_y_reshaped = d_y.transpose(1, 2, 3, 0).reshape(n_filter, -1)
 
         if isinstance(d_y, PublicEncodedTensor) or isinstance(d_y, NativeTensor):
-            dw = d_y_reshaped.dot(X_col.transpose())
+            dw = d_y_reshaped.dot(x_col.transpose())
             return dw.reshape(filter_shape)
         if isinstance(d_y, PrivateEncodedTensor):
             if use_specialized_triple:
                 if reuse_mask:
                     a, a_col, alpha_col = x.mask, x.mask_transformed, x.masked_transformed
-                    a, b, a_convbw_b = generate_convbw_triple(a.shape, d_y_reshaped.shape, a=a, a_col=a_col)
+                    a, b, a_convbw_b = generate_convbw_triple(a.shape, d_y_reshaped.shape, shares_a=a,
+                                                              shares_a_col=a_col)
                     beta = (d_y_reshaped - b).reveal()
 
                     alpha_convbw_beta = beta.dot(alpha_col.transpose())
@@ -1201,7 +1205,7 @@ class PrivateEncodedTensor:
                     z = (alpha_convbw_beta + alpha_convbw_b + a_convbw_beta + a_convbw_b).reshape(filter_shape)
                     return PrivateEncodedTensor.from_shares(z.shares0, z.shares1).truncate()
             else:
-                dw = d_y_reshaped.dot(X_col.transpose())
+                dw = d_y_reshaped.dot(x_col.transpose())
                 return dw.reshape(filter_shape)
 
     def convavgpool_bw(x, d_y, cache, filter_shape, pool_size=None, pool_strides=None,
@@ -1224,8 +1228,9 @@ class PrivateEncodedTensor:
             b, b_expanded, beta_expanded = d_y.mask, d_y.mask_transformed, d_y.masked_transformed
 
             a, b, a_conv_pool_bw_b, b_expanded = generate_conv_pool_bw_triple(a.shape, d_y.shape, pool_size=pool_size,
-                                                                              n_filter=n_filter, a=a, a_col=a_col,
-                                                                              b=b, b_expanded=b_expanded)
+                                                                              n_filter=n_filter, shares_a=a,
+                                                                              shares_a_col=a_col, shares_b=b,
+                                                                              shares_b_expanded=b_expanded)
             if beta_expanded is None:
                 beta = ((d_y / pool_area) - b).reveal()  # divide by pool area before specialized triplet
                 beta_expanded = beta.repeat(pool_size[0], axis=2).repeat(pool_size[1], axis=3).transpose(1, 2, 3, 0)\
@@ -1260,7 +1265,7 @@ class PrivateEncodedTensor:
 
             a, alpha = w.mask, w.masked
             a, b, a_conv_pool_delta_b, b_expanded = generate_conv_pool_delta_triple(a.shape, d_y.shape, pool_size,
-                                                                                    n_filter, a=a)
+                                                                                    n_filter, shares_a=a)
 
             a_reshaped = a.reshape(n_filter, -1).transpose()
             alpha_reshaped = alpha.reshape(n_filter, -1).transpose()
