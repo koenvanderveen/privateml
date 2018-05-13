@@ -807,7 +807,7 @@ def generate_conv_pool_bw_triple(xshape, yshape, pool_size, n_filter, shares_a=N
     if shares_b_expanded is None:
         b_expanded = b.repeat(pool_size[0], axis=2).repeat(pool_size[1], axis=3).transpose(1, 2, 3, 0)\
             .reshape(n_filter, -1)
-        shares_b_expanded = PrivateFieldTensor.from_elements(shares_b_expanded)
+        shares_b_expanded = PrivateFieldTensor.from_elements(b_expanded)
     else:
         b_expanded = shares_b_expanded.reveal(count_communication=False).elements
 
