@@ -2,9 +2,11 @@ import numpy as np
 import sys
 from datetime import datetime, timedelta
 from functools import reduce
-from pond.tensor import NativeTensor, stack
+from pond.tensor import NativeTensor, PublicEncodedTensor, PrivateEncodedTensor, stack, USE_SPECIALIZED_TRIPLE,\
+    REUSE_MASK, generate_conv_triple, generate_convbw_triple, generate_conv_pool_bw_triple, generate_conv_pool_delta_triple
 import math
 import time
+import pond
 
 
 class Layer:
@@ -293,7 +295,7 @@ class Conv2D:
     def forward(self, x):
         self.cached_input_shape = x.shape
         self.cache = x
-        out, self.cached_x_col = x.conv2d(self.filters, self.strides, self.padding)
+        out, self.cached_x_col = conv2d(x, self.filters, self.strides, self.padding)
 
         return out + self.bias
 
@@ -308,7 +310,7 @@ class Conv2D:
             dx = W_reshaped.dot(dout_reshaped).col2im(imshape=self.cached_input_shape, field_height=h_filter,
                                                       field_width=w_filter, padding=self.padding, stride=self.strides)
 
-        d_w = x.conv2d_bw(d_y, self.cached_x_col, self.filters.shape, padding=self.padding, strides=self.strides)
+        d_w = conv2d_bw(x, d_y, self.cached_x_col, self.filters.shape, padding=self.padding, strides=self.strides)
         d_bias = d_y.sum(axis=0)
 
         if self.l2reg_lambda > 0:
@@ -316,97 +318,6 @@ class Conv2D:
 
         self.filters = (d_w * learning_rate).neg() + self.filters
         self.bias = (d_bias * learning_rate).neg() + self.bias
-
-        return dx
-
-
-class ConvAveragePooling2D:
-    def __init__(self, fshape, strides=1, padding=0, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp),
-                 l2reg_lambda=0.0, pool_size=(2, 2), pool_strides=None, channels_first=True):
-        """ 2 Dimensional convolutional layer followed by average pooling layer
-            , expects NCHW data format and is optimized for communication
-            fshape: tuple of rank 4
-            strides: int with stride size
-            filter init: lambda function with shape parameter
-            Example: Conv2D((4, 4, 1, 20), strides=2, filter_init=lambda shp: np.random.normal(scale=0.01,
-            size=shp))
-        """
-
-        self.fshape = fshape
-        self.strides = strides
-        self.padding = padding
-        self.filter_init = filter_init
-        self.l2reg_lambda = l2reg_lambda
-        self.cache = None
-        self.cache2 = None
-        self.cached_input_shape = None
-        self.initializer = None
-        self.filters = None
-        self.bias = None
-        self.model = None
-        self.pool_size = pool_size
-        self.pool_area = pool_size[0] * pool_size[1]
-        if pool_strides is None:
-            self.pool_strides = pool_size[0]
-        else:
-            self.pool_strides = pool_strides
-
-        assert channels_first
-
-    def initialize(self, input_shape, model=None, initializer=None):
-        self.model = model
-
-        h_filter, w_filter, d_filters, n_filters = self.fshape
-        n_x, d_x, h_x, w_x = input_shape
-        h_out = int((h_x - h_filter + 2 * self.padding) / self.strides + 1)
-        w_out = int((w_x - w_filter + 2 * self.padding) / self.strides + 1)
-
-        self.bias = initializer(np.zeros((n_filters, h_out, w_out)))
-        self.filters = initializer(self.filter_init(self.fshape))
-        s = (h_out - self.pool_size[0]) // self.pool_strides + 1
-
-        return [n_x, n_filters, s, s]
-
-    def forward(self, x):
-        self.initializer = type(x)
-        self.cached_input_shape = x.shape
-        self.cache = x
-
-        out, self.cache2 = x.conv2d(self.filters, self.strides, self.padding)
-        x_pool = out + self.bias
-
-        s = (x_pool.shape[2] - self.pool_size[0]) // self.pool_strides + 1
-        pooled = self.initializer(np.zeros((x_pool.shape[0], x_pool.shape[1], s, s)))
-        for j in range(s):
-            for i in range(s):
-                pooled[:, :, j, i] = x_pool[:, :, j * self.pool_strides:j * self.pool_strides + self.pool_size[0],
-                                            i * self.pool_strides:i * self.pool_strides + self.pool_size[1]]\
-                                                .sum(axis=(2, 3))
-
-        pooled = pooled / self.pool_area
-        return pooled
-
-    def backward(self, d_y, learning_rate):
-        d_y_expanded = d_y.copy().repeat(self.pool_size[0], axis=2)
-        d_y_expanded = d_y_expanded.repeat(self.pool_size[1], axis=3)
-        d_y_conv = d_y_expanded / self.pool_area
-        dx = None
-        x = self.cache
-
-        if self.model.layers.index(self) != 0:
-            dx = d_y.convavgpool_delta(self.filters, self.cached_input_shape, padding=self.padding,
-                                                 strides=self.strides, pool_size=self.pool_size,
-                                                 pool_strides=self.pool_strides)
-
-        d_w = x.convavgpool_bw(d_y, self.cache2, self.filters.shape, self.padding, self.strides,
-                               self.pool_size, self.pool_strides)
-        d_bias = d_y_conv.sum(axis=0)
-
-        if self.l2reg_lambda > 0:
-            d_w = d_w + self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
-
-        self.filters = (d_w * learning_rate).neg() + self.filters
-        self.bias = ((d_bias * learning_rate).neg() + self.bias)
 
         return dx
 
@@ -442,7 +353,7 @@ class AveragePooling2D:
         for j in range(s):
             for i in range(s):
                 pooled[:, :, j, i] = x[:, :, j * self.strides:j * self.strides + self.pool_size[0],
-                                       i * self.strides:i * self.strides + self.pool_size[1]].sum(axis=(2, 3))
+                                     i * self.strides:i * self.strides + self.pool_size[1]].sum(axis=(2, 3))
 
         pooled = pooled / self.pool_area
         return pooled
@@ -452,6 +363,100 @@ class AveragePooling2D:
         d_y_expanded = d_y_expanded.repeat(self.pool_size[1], axis=3)
         d_x = d_y_expanded / self.pool_area
         return d_x
+
+
+class ConvAveragePooling2D:
+    def __init__(self, fshape, strides=1, padding=0, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp),
+                 l2reg_lambda=0.0, pool_size=(2, 2), pool_strides=None, channels_first=True):
+        """ 2 Dimensional convolutional layer followed by average pooling layer
+            , expects NCHW data format and is optimized for communication
+            fshape: tuple of rank 4
+            strides: int with stride size
+            filter init: lambda function with shape parameter
+        """
+
+        self.fshape = fshape
+        self.strides = strides
+        self.padding = padding
+        self.filter_init = filter_init
+        self.l2reg_lambda = l2reg_lambda
+        self.cache = None
+        self.cache2 = None
+        self.cached_input_shape = None
+        self.initializer = None
+        self.filters = None
+        self.bias = None
+        self.model = None
+        self.pool_size = pool_size
+        self.pool_area = pool_size[0] * pool_size[1]
+        if pool_strides is None:
+            self.pool_strides = pool_size[0]
+        else:
+            self.pool_strides = pool_strides
+
+        assert channels_first
+
+    def initialize(self, input_shape, model=None, initializer=None):
+        # because this layer only makes sense to optimize for communication, use_specialized_triple and reuse_mask
+        # are allways set to True
+        pond.tensor.USE_SPECIALIZED_TRIPLE = True
+        pond.tensor.REUSE_MASK = True
+        self.model = model
+
+        h_filter, w_filter, d_filters, n_filters = self.fshape
+        n_x, d_x, h_x, w_x = input_shape
+        h_out = int((h_x - h_filter + 2 * self.padding) / self.strides + 1)
+        w_out = int((w_x - w_filter + 2 * self.padding) / self.strides + 1)
+
+        self.bias = initializer(np.zeros((n_filters, h_out, w_out)))
+        self.filters = initializer(self.filter_init(self.fshape))
+        s = (h_out - self.pool_size[0]) // self.pool_strides + 1
+
+        return [n_x, n_filters, s, s]
+
+    def forward(self, x):
+        self.initializer = type(x)
+        self.cached_input_shape = x.shape
+        self.cache = x
+
+
+        out, self.cache2 = conv2d(x, self.filters, self.strides, self.padding)
+        x_pool = out + self.bias
+
+        s = (x_pool.shape[2] - self.pool_size[0]) // self.pool_strides + 1
+        pooled = self.initializer(np.zeros((x_pool.shape[0], x_pool.shape[1], s, s)))
+        for j in range(s):
+            for i in range(s):
+                pooled[:, :, j, i] = x_pool[:, :, j * self.pool_strides:j * self.pool_strides + self.pool_size[0],
+                                            i * self.pool_strides:i * self.pool_strides + self.pool_size[1]]\
+                                                .sum(axis=(2, 3))
+
+        pooled = pooled / self.pool_area
+        return pooled
+
+    def backward(self, d_y, learning_rate):
+        d_y_expanded = d_y.copy().repeat(self.pool_size[0], axis=2)
+        d_y_expanded = d_y_expanded.repeat(self.pool_size[1], axis=3)
+        d_y_conv = d_y_expanded / self.pool_area
+        dx = None
+        x = self.cache
+
+
+        if self.model.layers.index(self) != 0:
+            dx = convavgpool_delta(d_y, self.filters, self.cached_input_shape, padding=self.padding,
+                                   strides=self.strides, pool_size=self.pool_size, pool_strides=self.pool_strides)
+
+        d_w = convavgpool_bw(x, d_y, self.cache2, self.filters.shape, pool_size=self.pool_size,
+                             pool_strides=self.pool_strides)
+        d_bias = d_y_conv.sum(axis=0)
+
+        if self.l2reg_lambda > 0:
+            d_w = d_w + self.filters * (self.l2reg_lambda / self.cached_input_shape[0])
+
+        self.filters = (d_w * learning_rate).neg() + self.filters
+        self.bias = ((d_bias * learning_rate).neg() + self.bias)
+
+        return dx
 
 
 class Reveal(Layer):
@@ -499,6 +504,202 @@ class CrossEntropy(Loss):
 
 class SoftmaxCrossEntropy(Loss):
     pass
+
+
+
+def conv2d(x, y, strides, padding, precomputed=None, save_mask=True):
+    if isinstance(x, NativeTensor) or isinstance(x, PublicEncodedTensor):
+        # shapes, assuming NCHW
+        h_filter, w_filter, d_filters, n_filters = y.shape
+        n_x, d_x, h_x, w_x = x.shape
+        h_out = int((h_x - h_filter + 2 * padding) / strides + 1)
+        w_out = int((w_x - w_filter + 2 * padding) / strides + 1)
+
+        X_col = x.im2col(h_filter, w_filter, padding, strides)
+        W_col = y.transpose(3, 2, 0, 1).reshape(n_filters, -1)
+        out = W_col.dot(X_col)
+
+        out = out.reshape(n_filters, h_out, w_out, n_x)
+        out = out.transpose(3, 0, 1, 2)
+
+        return out, X_col
+    elif isinstance(x, PrivateEncodedTensor):
+        h_filter, w_filter, d_y, n_filters = y.shape
+        n_x, d_x, h_x, w_x = x.shape
+        h_out = int((h_x - h_filter + 2 * padding) / strides + 1)
+        w_out = int((w_x - w_filter + 2 * padding) / strides + 1)
+
+        if isinstance(y, PublicEncodedTensor):
+            X_col = x.im2col(h_filter, w_filter, padding, strides)
+            y_col = y.transpose(3, 2, 0, 1).reshape(n_filters, -1)
+            out = y_col.dot(X_col).reshape(n_filters, h_out, w_out, n_x).transpose(3, 0, 1, 2)
+            return out, X_col
+
+        if isinstance(y, PrivateEncodedTensor):
+            if pond.tensor.USE_SPECIALIZED_TRIPLE:
+                if precomputed is None: precomputed = generate_conv_triple(x.shape, y.shape, strides, padding)
+
+                a, b, a_conv_b, a_col = precomputed
+                alpha = (x - a).reveal()
+                beta = (y - b).reveal()
+
+                alpha_col = alpha.im2col(h_filter, w_filter, padding, strides)
+                beta_col = beta.transpose(3, 2, 0, 1).reshape(n_filters, -1)
+                b_col = b.transpose(3, 2, 0, 1).reshape(n_filters, -1)
+
+                alpha_conv_beta = beta_col.dot(alpha_col)
+                alpha_conv_b = b_col.dot(alpha_col)
+                a_conv_beta = beta_col.dot(a_col)
+
+                z = (alpha_conv_beta + alpha_conv_b + a_conv_beta + a_conv_b).reshape(n_filters, h_out, w_out,
+                                                                                      n_x).transpose(3, 0, 1, 2)
+                if save_mask:
+                    x.mask, x.masked, x.mask_transformed, x.masked_transformed = a, alpha, a_col, alpha_col
+                    y.mask, y.masked, y.mask_transformed, y.masked_transformed = b, beta, b_col, beta_col
+
+                return PrivateEncodedTensor.from_shares(z.shares0, z.shares1).truncate(), None
+
+            else:
+                X_col = x.im2col(h_filter, w_filter, padding, strides)
+                W_col = y.transpose(3, 2, 0, 1).reshape(n_filters, -1)
+                out = W_col.dot(X_col).reshape(n_filters, h_out, w_out, n_x).transpose(3, 0, 1, 2)
+                return out, X_col
+
+        raise TypeError("%s does not support %s" % (type(x), type(y)))
+    raise TypeError("%s does not support %s" % (type(x), type(y)))
+
+
+def conv2d_bw(x, d_y, x_col, filter_shape, padding=None, strides=None):
+
+    if isinstance(x, NativeTensor) or isinstance(x, PublicEncodedTensor):
+        if isinstance(d_y, NativeTensor) or isinstance(d_y, PublicEncodedTensor):
+            assert x_col is not None
+            h_filter, w_filter, d_filter, n_filter = filter_shape
+            dout_reshaped = d_y.transpose(1, 2, 3, 0).reshape(n_filter, -1)
+            dw = dout_reshaped.dot(x_col.transpose())
+            dw = dw.reshape(filter_shape)
+            return dw
+        else:
+            raise TypeError("%s does not support %s" % (type(x), type(d_y)))
+
+    elif isinstance(x, PrivateEncodedTensor):
+        h_filter, w_filter, d_filter, n_filter = filter_shape
+        d_y_reshaped = d_y.transpose(1, 2, 3, 0).reshape(n_filter, -1)
+
+        if isinstance(d_y, PublicEncodedTensor) or isinstance(d_y, NativeTensor):
+            dw = d_y_reshaped.dot(x_col.transpose())
+            return dw.reshape(filter_shape)
+        if isinstance(d_y, PrivateEncodedTensor):
+            if pond.tensor.USE_SPECIALIZED_TRIPLE:
+                if pond.tensor.USE_SPECIALIZED_TRIPLE:
+                    a, a_col, alpha_col = x.mask, x.mask_transformed, x.masked_transformed
+                    a, b, a_convbw_b = generate_convbw_triple(a.shape, d_y_reshaped.shape, shares_a=a,
+                                                              shares_a_col=a_col)
+                    beta = (d_y_reshaped - b).reveal()
+
+                    alpha_convbw_beta = beta.dot(alpha_col.transpose())
+                    alpha_convbw_b = b.dot(alpha_col.transpose())
+                    a_convbw_beta = beta.dot(a_col.transpose())
+
+                    z = (alpha_convbw_beta + alpha_convbw_b + a_convbw_beta + a_convbw_b).reshape(filter_shape)
+                    return PrivateEncodedTensor.from_shares(z.shares0, z.shares1).truncate()
+
+                else:
+                    a, b, a_convbw_b = generate_convbw_triple(x.shape, d_y_reshaped.shape)
+                    alpha = (x - a).reveal()
+                    beta = (d_y_reshaped - b).reveal()
+
+                    alpha_col = alpha.im2col(h_filter, w_filter, padding, strides)
+                    a_col = a.im2col(h_filter, w_filter, padding, strides)
+
+                    alpha_convbw_beta = beta.dot(alpha_col.transpose())
+                    alpha_convbw_b = b.dot(alpha_col.transpose())
+                    a_convbw_beta = beta.dot(a_col.transpose())
+
+                    z = (alpha_convbw_beta + alpha_convbw_b + a_convbw_beta + a_convbw_b).reshape(filter_shape)
+                    return PrivateEncodedTensor.from_shares(z.shares0, z.shares1).truncate()
+            else:
+                dw = d_y_reshaped.dot(x_col.transpose())
+                return dw.reshape(filter_shape)
+        raise TypeError("%s does not support %s" % (type(x), type(d_y)))
+    raise TypeError("%s does not support %s" % (type(x), type(d_y)))
+
+
+def convavgpool_bw(x, d_y, cache, filter_shape, pool_size=None, pool_strides=None):
+    h_filter, w_filter, d_filter, n_filter = filter_shape
+    pool_area = pool_size[0] * pool_size[1]
+
+    if isinstance(d_y, PublicEncodedTensor) or isinstance(d_y, NativeTensor) or isinstance(x, NativeTensor) \
+            or isinstance(x, PublicEncodedTensor):
+        d_y_expanded = d_y.repeat(pool_size[0], axis=2).repeat(pool_size[1], axis=3)
+        d_y_conv = d_y_expanded / pool_area
+        X_col = cache
+        d_y_conv_reshaped = d_y_conv.transpose(1, 2, 3, 0).reshape(n_filter, -1)
+        dw = d_y_conv_reshaped.dot(X_col.transpose())
+        return dw.reshape(filter_shape)
+    if isinstance(d_y, PrivateEncodedTensor):
+        assert pond.tensor.USE_SPECIALIZED_TRIPLE and pond.tensor.REUSE_MASK
+        assert pool_size[0] == pool_strides and pool_size[1] == pool_strides, (pool_size, pool_strides)
+
+        a, a_col, alpha_col = x.mask, x.mask_transformed, x.masked_transformed
+        b, b_expanded, beta_expanded = d_y.mask, d_y.mask_transformed, d_y.masked_transformed
+
+        a, b, a_conv_pool_bw_b, b_expanded = generate_conv_pool_bw_triple(a.shape, d_y.shape, pool_size=pool_size,
+                                                                          n_filter=n_filter, shares_a=a,
+                                                                          shares_a_col=a_col, shares_b=b,
+                                                                          shares_b_expanded=b_expanded)
+        if beta_expanded is None:
+            beta = ((d_y / pool_area) - b).reveal()  # divide by pool area before specialized triplet
+            beta_expanded = beta.repeat(pool_size[0], axis=2).repeat(pool_size[1], axis=3).transpose(1, 2, 3, 0) \
+                .reshape(n_filter, -1)
+
+        alpha_conv_pool_bw_beta = beta_expanded.dot(alpha_col.transpose())
+        alpha_conv_pool_bw_b = b_expanded.dot(alpha_col.transpose())
+        a_conv_pool_bw_beta = beta_expanded.dot(a_col.transpose())
+
+        z = (alpha_conv_pool_bw_beta + alpha_conv_pool_bw_b + a_conv_pool_bw_beta + a_conv_pool_bw_b
+             ).reshape(filter_shape)
+        return PrivateEncodedTensor.from_shares(z.shares0, z.shares1).truncate()
+
+def convavgpool_delta(d_y, w, cached_input_shape, padding=None, strides=None, pool_size=None, pool_strides=None):
+    h_filter, w_filter, d_filter, n_filter = w.shape
+    pool_area = pool_size[0] * pool_size[1]
+
+    if isinstance(d_y, PublicEncodedTensor) or isinstance(d_y, NativeTensor):
+        d_y_expanded = d_y.copy().repeat(pool_size[0], axis=2)
+        d_y_expanded = d_y_expanded.repeat(pool_size[1], axis=3)
+        d_y_conv = d_y_expanded / pool_area
+        W_reshape = w.reshape(n_filter, -1)
+        dout_reshaped = d_y_conv.transpose(1, 2, 3, 0).reshape(n_filter, -1)
+        dx_col = W_reshape.transpose().dot(dout_reshaped)
+        dx = dx_col.col2im(imshape=cached_input_shape, field_height=h_filter, field_width=w_filter,
+                           padding=padding, stride=strides)
+        return dx
+    if isinstance(d_y, PrivateEncodedTensor):
+        assert pond.tensor.use_specialized_triple and pond.tensor.reuse_mask
+        assert pool_size[0] == pool_strides and pool_size[1] == pool_strides
+
+        a, alpha = w.mask, w.masked
+        a, b, a_conv_pool_delta_b, b_expanded = generate_conv_pool_delta_triple(a.shape, d_y.shape, pool_size,
+                                                                                n_filter, shares_a=a)
+
+        a_reshaped = a.reshape(n_filter, -1).transpose()
+        alpha_reshaped = alpha.reshape(n_filter, -1).transpose()
+        beta = ((d_y / pool_area) - b).reveal()  # divide by pool area before specialized triplet
+        beta_expanded = beta.repeat(pool_size[0], axis=2).repeat(pool_size[1], axis=3).transpose(1, 2, 3, 0) \
+            .reshape(n_filter, -1)
+
+        alpha_conv_pool_delta_beta = alpha_reshaped.dot(beta_expanded)
+        alpha_conv_pool_delta_b = alpha_reshaped.dot(b_expanded)
+        a_conv_pool_delta_beta = a_reshaped.dot(beta_expanded)
+
+        z = alpha_conv_pool_delta_beta + alpha_conv_pool_delta_b + a_conv_pool_delta_beta + a_conv_pool_delta_b
+        dx_col = PrivateEncodedTensor.from_shares(z.shares0, z.shares1).truncate()
+
+        d_y.mask, d_y.masked, d_y.mask_transformed, d_y.masked_transformed = b, beta, b_expanded, beta_expanded
+
+        return dx_col.col2im(imshape=cached_input_shape, field_height=h_filter,
+                             field_width=w_filter, padding=padding, stride=strides)
 
 
 class DataLoader:

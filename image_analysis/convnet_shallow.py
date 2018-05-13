@@ -2,7 +2,7 @@ import keras
 import numpy as np
 from pond.tensor import NativeTensor, PublicEncodedTensor, PrivateEncodedTensor
 from pond.nn import Dense, ReluExact, Relu, Reveal, CrossEntropy, SoftmaxStable, Sequential, DataLoader, Conv2D, \
-                                                                                  AveragePooling2D, Flatten
+                                                                                  AveragePooling2D, Flatten, ConvAveragePooling2D
 from keras.utils import to_categorical
 np.random.seed(42)
 
@@ -22,8 +22,10 @@ batch_size = 128
 input_shape = [batch_size] + list(x_train.shape[1:])
 
 convnet_shallow = Sequential([
-    Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
-    AveragePooling2D(pool_size=(2, 2)),
+    # Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
+    # AveragePooling2D(pool_size=(2, 2)),
+    ConvAveragePooling2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp),
+                         pool_size=(2, 2)),
     Relu(order=3),
     # ReluExact(),
     Flatten(),
