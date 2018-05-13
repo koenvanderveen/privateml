@@ -1,8 +1,5 @@
-import warnings
-with warnings.catch_warnings():
-    warnings.filterwarnings("ignore",category=FutureWarning)
-    import numpy as np
-    import keras
+import keras
+import numpy as np
 from pond.tensor import NativeTensor, PrivateEncodedTensor, PublicEncodedTensor
 from pond.nn import Dense, Relu, Reveal, CrossEntropy, SoftmaxStable, Sequential, DataLoader, Conv2D, AveragePooling2D, Flatten
 from keras.utils import to_categorical

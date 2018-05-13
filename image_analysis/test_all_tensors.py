@@ -27,7 +27,7 @@ input_shape = [batch_size] + list(x_train.shape[1:])
 for tensortype in [NativeTensor, PublicEncodedTensor, PrivateEncodedTensor]:
     np.random.seed(42)
     convnet_shallow = Sequential([
-        Conv2D((3, 3, 1, 32), strides=1, padding=1, filter_init=lambda shp: np.random.normal(scale=0.1, size=shp)),
+        Conv2D((3, 3, 1, 32), strides=1, padding=1),
         AveragePooling2D(pool_size=(2, 2)),
         Relu(order=3),
         Flatten(),
