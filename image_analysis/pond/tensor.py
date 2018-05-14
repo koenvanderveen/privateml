@@ -217,12 +217,12 @@ DTYPE = 'object'
 Q = 2657003489534545107915232808830590043
 
 
-# for arbitrary precision ints
+# For arbitrary precision integers.
 def log2(x):
     return log(x) / log(2)
 
 
-# we need room for summing MAX_SUM values of MAX_DEGREE before during modulus reduction
+# We need room for summing MAX_SUM values of MAX_DEGREE before during modulus reduction.
 MAX_DEGREE = 2
 MAX_SUM = 2 ** 12
 assert MAX_DEGREE * log2(Q) + log2(MAX_SUM) < 256
@@ -232,7 +232,7 @@ PRECISION_INTEGRAL = 16
 PRECISION_FRACTIONAL = 32
 # TODO Gap as needed for local truncating
 
-# we need room for double precision before truncating
+# We need room for double precision before truncating.
 assert PRECISION_INTEGRAL + 2 * PRECISION_FRACTIONAL < log(Q) / log(BASE)
 
 COMMUNICATION_ROUNDS = 0
