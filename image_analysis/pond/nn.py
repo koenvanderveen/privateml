@@ -3,7 +3,8 @@ import sys
 from datetime import datetime, timedelta
 from functools import reduce
 from pond.tensor import NativeTensor, PublicEncodedTensor, PrivateEncodedTensor, stack, USE_SPECIALIZED_TRIPLE,\
-    REUSE_MASK, generate_conv_triple, generate_convbw_triple, generate_conv_pool_bw_triple, generate_conv_pool_delta_triple
+    REUSE_MASK, generate_conv_triple, generate_convbw_triple, generate_conv_pool_bw_triple, \
+    generate_conv_pool_delta_triple
 import math
 import time
 import pond
@@ -353,7 +354,7 @@ class AveragePooling2D:
         for j in range(s):
             for i in range(s):
                 pooled[:, :, j, i] = x[:, :, j * self.strides:j * self.strides + self.pool_size[0],
-                                     i * self.strides:i * self.strides + self.pool_size[1]].sum(axis=(2, 3))
+                                       i * self.strides:i * self.strides + self.pool_size[1]].sum(axis=(2, 3))
 
         pooled = pooled / self.pool_area
         return pooled
@@ -419,7 +420,6 @@ class ConvAveragePooling2D:
         self.cached_input_shape = x.shape
         self.cache = x
 
-
         out, self.cache2 = conv2d(x, self.filters, self.strides, self.padding)
         x_pool = out + self.bias
 
@@ -440,7 +440,6 @@ class ConvAveragePooling2D:
         d_y_conv = d_y_expanded / self.pool_area
         dx = None
         x = self.cache
-
 
         if self.model.layers.index(self) != 0:
             dx = convavgpool_delta(d_y, self.filters, self.cached_input_shape, padding=self.padding,
@@ -504,7 +503,6 @@ class CrossEntropy(Loss):
 
 class SoftmaxCrossEntropy(Loss):
     pass
-
 
 
 def conv2d(x, y, strides, padding, precomputed=None, save_mask=True):
@@ -660,6 +658,7 @@ def convavgpool_bw(x, d_y, cache, filter_shape, pool_size=None, pool_strides=Non
         z = (alpha_conv_pool_bw_beta + alpha_conv_pool_bw_b + a_conv_pool_bw_beta + a_conv_pool_bw_b
              ).reshape(filter_shape)
         return PrivateEncodedTensor.from_shares(z.shares0, z.shares1).truncate()
+
 
 def convavgpool_delta(d_y, w, cached_input_shape, padding=None, strides=None, pool_size=None, pool_strides=None):
     h_filter, w_filter, d_filter, n_filter = w.shape
