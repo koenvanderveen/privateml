@@ -10,7 +10,7 @@ except ImportError as e:
     im2col_cython_float, col2im_cython_float = None, None
     im2col_cython_object, col2im_cython_object = None, None
     print(e)
-    print('\nRun the following from the image_analysis/im2col directory to use cython:')
+    print('\nRun the following from the project root directory to use cython:')
     print('python setup.py build_ext --inplace\n')
     use_cython = False
 
