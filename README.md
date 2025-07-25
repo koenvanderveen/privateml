@@ -1,5 +1,5 @@
 # PrivateML 
-Training convolutional neural nets (CNNs) using SPDZ; Read this [blogpost](https://blog.openmined.org/p/7bd21a61-669b-4c8c-8eaf-830dbf6f5641/) 
+Training convolutional neural nets (CNNs) using SPDZ; Read this [blogpost](https://openmined.org/blog/training-cnns-using-spdz/) 
 to learn more. This repository is an extension of [privateml/image-analysis](https://github.com/mortendahl/privateml/tree/master/image-analysis).
 
 
